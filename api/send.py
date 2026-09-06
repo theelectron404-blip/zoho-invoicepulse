@@ -65,70 +65,24 @@ class handler(BaseHTTPRequestHandler):
             host = self.headers.get('Host', 'zoho-invoicepulse.vercel.app')
             beacon_url = f"https://{host}/api/track?id={inv_num}&email={urllib.parse.quote(email)}"
 
-            # 4. Strict Inline HTML Email Template with Beautiful CTA Button
-            styled_html = f"""<table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#f1f5f9; padding:24px 0; font-family:Arial, sans-serif;">
-  <tr>
-    <td align="center">
-      <table width="560" border="0" cellspacing="0" cellpadding="0" style="max-width:560px; width:100%; background-color:#ffffff; border-radius:10px; border:1px solid #e2e8f0; overflow:hidden; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
-        <!-- Card Header -->
-        <tr>
-          <td style="background-color:#1e40af; padding:22px 28px; text-align:left;">
-            <table width="100%" border="0" cellspacing="0" cellpadding="0">
-              <tr>
-                <td style="font-size:20px; font-weight:bold; color:#ffffff; letter-spacing:-0.02em;">My Store</td>
-                <td align="right" style="font-size:13px; color:#bfdbfe; font-family:monospace; font-weight:bold;">#{inv_num}</td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-        <!-- Card Body -->
-        <tr>
-          <td style="padding:28px 28px 20px 28px;">
-            {msg_html}
+            # 4. Clean Body with Inline Styled Button (NO Blue Header / NO Extra Banner)
+            styled_html = f"""<div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #1e293b; max-width: 580px; padding: 10px 0;">
+  {msg_html}
 
-            <!-- Invoice Item & Total Box -->
-            <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:20px 0; background-color:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">
-              <tr>
-                <td style="padding:16px 20px;">
-                  <table width="100%" border="0" cellspacing="0" cellpadding="0">
-                    <tr>
-                      <td style="font-size:13px; color:#64748b;"><strong>Item / Service:</strong></td>
-                      <td align="right" style="font-size:13px; color:#0f172a; font-weight:600;">{product}</td>
-                    </tr>
-                    <tr>
-                      <td style="font-size:13px; color:#64748b; padding-top:8px;"><strong>Total Amount Due:</strong></td>
-                      <td align="right" style="font-size:18px; color:#1e40af; font-weight:bold; padding-top:8px;">{formatted_amount}</td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-            </table>
+  <!-- Styled CTA Button -->
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 20px 0 16px 0;">
+    <tr>
+      <td align="left">
+        <a href="{payment_link}" target="_blank" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 14px; font-weight: bold; text-decoration: none; padding: 12px 26px; border-radius: 6px;">
+          💳 View &amp; Pay Invoice &rarr;
+        </a>
+      </td>
+    </tr>
+  </table>
 
-            <!-- Styled CTA Button -->
-            <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:22px 0 16px 0;">
-              <tr>
-                <td align="center">
-                  <a href="{payment_link}" target="_blank" style="display:inline-block; background-color:#2563eb; color:#ffffff; font-size:14px; font-weight:bold; text-decoration:none; padding:12px 28px; border-radius:6px; box-shadow:0 2px 4px rgba(37,99,235,0.3);">
-                    💳 View &amp; Pay Invoice Online &rarr;
-                  </a>
-                </td>
-              </tr>
-            </table>
-
-            <p style="margin:16px 0 0 0; font-size:12px; color:#64748b; text-align:center;">📎 The official PDF invoice copy is attached to this email.</p>
-          </td>
-        </tr>
-        <!-- Card Footer -->
-        <tr>
-          <td style="background-color:#f8fafc; padding:14px 28px; border-top:1px solid #e2e8f0; font-size:11px; color:#94a3b8; text-align:center;">
-            Sent securely via Zoho Books Invoice Engine &bull; Invoice Ref: {inv_num}
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>
-<img src="{beacon_url}" width="1" height="1" alt="" style="display:none!important;" />"""
+  <p style="font-size: 12px; color: #64748b; margin-top: 14px;">📎 The official PDF invoice copy is attached to this email.</p>
+  <img src="{beacon_url}" width="1" height="1" alt="" style="display:none!important;" />
+</div>"""
 
             send_payload = {
                 'send_attachment': True,
