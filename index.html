@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InvoicePulse - Bulk Invoicing &amp; Open Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased">
+
+  <header class="h-16 border-b border-slate-800 bg-slate-900 px-6 flex items-center justify-between sticky top-0 z-30 shadow-lg">
+    <div class="flex items-center space-x-3">
+      <div class="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white text-xl shadow-lg shadow-blue-500/20">⚡</div>
+      <div>
+        <h1 class="font-bold text-slate-100 text-base leading-tight">InvoicePulse</h1>
+        <p class="text-[11px] text-slate-400">Zoho Books Invoicing &bull; Custom Email &bull; Open Tracker</p>
+      </div>
+    </div>
+    <div class="flex items-center space-x-3">
+      <button onclick="toggleSettings()" class="text-xs text-slate-400 hover:text-white bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">⚙️ Zoho Setup</button>
+      <button onclick="sendAllQueued()" id="btn-top-send" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-lg shadow-emerald-600/20 transition">🚀 Send All</button>
+    </div>
+  </header>
+
+  <main class="flex-1 p-6 max-w-[1300px] w-full mx-auto space-y-5">
+
+    <!-- SETTINGS PANEL -->
+    <div id="settings-panel" class="hidden bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 shadow-xl">
+      <div class="flex justify-between items-center">
+        <h2 class="text-sm font-bold text-white">⚙️ Zoho Books API Credentials</h2>
+        <button onclick="toggleSettings()" class="text-slate-400 hover:text-white text-lg">&times;</button>
+      </div>
+      <p class="text-xs text-slate-400">Credentials are stored privately in your browser's localStorage. Multiple users can use this independently.</p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+        <div><label class="text-slate-400 font-semibold block mb-1">Zoho Client ID</label><input id="cfg-cid" type="text" placeholder="1000.XXXXXXXXXXXX" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono" /></div>
+        <div><label class="text-slate-400 font-semibold block mb-1">Zoho Client Secret</label><input id="cfg-secret" type="password" placeholder="xxxxxxxxxxxxxxx" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono" /></div>
+        <div><label class="text-slate-400 font-semibold block mb-1">Zoho Organization ID</label><input id="cfg-org" type="text" placeholder="e.g. 938042465" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono" /></div>
+        <div>
+          <label class="text-slate-400 font-semibold block mb-1">Region</label>
+          <select id="cfg-region" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono">
+            <option value="US">US (accounts.zoho.com)</option>
+            <option value="EU">EU (accounts.zoho.eu)</option>
+            <option value="IN">IN (accounts.zoho.in)</option>
+            <option value="AU">AU (accounts.zoho.com.au)</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button onclick="saveZohoConfig()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-5 py-2 rounded-lg shadow">💾 Save</button>
+        <a id="auth-link" href="#" target="_blank" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2 rounded-lg shadow">🔗 Authorize Zoho</a>
+        <span id="auth-badge" class="text-xs text-slate-500 font-mono">Not connected</span>
+      </div>
+    </div>
+
+    <!-- 1. EMAIL SUBJECT & BODY EDITOR -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3 shadow-sm">
+      <div class="flex justify-between items-center">
+        <h2 class="text-sm font-bold text-white">✉️ Email Subject &amp; Custom Body</h2>
+        <span class="text-[11px] text-emerald-400 font-mono">✓ Auto-Saves on Change</span>
+      </div>
+      <div>
+        <label class="text-xs text-slate-400 font-semibold block mb-1">Subject</label>
+        <input id="ed-subject" oninput="saveTemplateState()" type="text" value="Invoice #{{invoice_number}} from {{company_name}} - Total ${{amount}} Due" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500" />
+      </div>
+      <div>
+        <div class="flex justify-between items-center mb-1">
+          <label class="text-xs text-slate-400 font-semibold">Email Body (Plain text or HTML)</label>
+          <div class="flex gap-1 flex-wrap">
+            <button onclick="insertTag('{{client_name}}')" class="text-[10px] bg-slate-950 hover:bg-slate-800 text-blue-400 border border-slate-800 px-1.5 py-0.5 rounded font-mono">+{{client_name}}</button>
+            <button onclick="insertTag('{{invoice_number}}')" class="text-[10px] bg-slate-950 hover:bg-slate-800 text-blue-400 border border-slate-800 px-1.5 py-0.5 rounded font-mono">+{{invoice_number}}</button>
+            <button onclick="insertTag('{{amount}}')" class="text-[10px] bg-slate-950 hover:bg-slate-800 text-blue-400 border border-slate-800 px-1.5 py-0.5 rounded font-mono">+{{amount}}</button>
+            <button onclick="insertTag('{{product}}')" class="text-[10px] bg-slate-950 hover:bg-slate-800 text-blue-400 border border-slate-800 px-1.5 py-0.5 rounded font-mono">+{{product}}</button>
+            <button onclick="insertTag('{{due_date}}')" class="text-[10px] bg-slate-950 hover:bg-slate-800 text-blue-400 border border-slate-800 px-1.5 py-0.5 rounded font-mono">+{{due_date}}</button>
+            <button onclick="insertTag('{{company_name}}')" class="text-[10px] bg-slate-950 hover:bg-slate-800 text-blue-400 border border-slate-800 px-1.5 py-0.5 rounded font-mono">+{{company_name}}</button>
+          </div>
+        </div>
+        <textarea id="ed-body" oninput="saveTemplateState()" rows="5" placeholder="Hello {{client_name}},&#10;&#10;Please find your official invoice #{{invoice_number}} for {{amount}}, due {{due_date}}.&#10;&#10;Thank you for your business!" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500 resize-y leading-relaxed"></textarea>
+        <p class="text-[10px] text-slate-500 mt-1">💡 The official Zoho PDF invoice is attached automatically. The open tracking pixel is injected automatically.</p>
+      </div>
+    </div>
+
+    <!-- 2. QUICK ADD CUSTOMER -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3 shadow-sm">
+      <h2 class="text-sm font-bold text-white">➕ Add Customer &amp; Invoice</h2>
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-3 text-xs">
+        <div><label class="text-slate-400 font-semibold block mb-1">Customer Name</label><input id="in-name" type="text" placeholder="Navdeep Singh" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500" /></div>
+        <div class="md:col-span-2"><label class="text-slate-400 font-semibold block mb-1">Recipient Email *</label><input id="in-email" type="email" placeholder="navdeep252@aol.com" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono focus:outline-none focus:border-blue-500" /></div>
+        <div><label class="text-slate-400 font-semibold block mb-1">Product / Item</label><input id="in-product" type="text" placeholder="Cloud Hosting" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500" /></div>
+        <div><label class="text-slate-400 font-semibold block mb-1">Amount ($)</label><input id="in-amount" type="number" placeholder="2500" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono focus:outline-none focus:border-blue-500" /></div>
+      </div>
+      <div class="flex justify-between items-center">
+        <button onclick="toggleBulk()" class="text-xs text-blue-400 underline">📋 Bulk paste multiple customers</button>
+        <div class="flex gap-2">
+          <button onclick="addToQueue()" class="bg-slate-800 hover:bg-slate-700 text-white text-xs px-4 py-2 rounded-lg border border-slate-700">+ Add to Queue</button>
+          <button onclick="sendInstant()" id="btn-instant" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-5 py-2 rounded-lg shadow">⚡ Send Now via Zoho</button>
+        </div>
+      </div>
+      <div id="bulk-area" class="hidden space-y-2 pt-2 border-t border-slate-800">
+        <div class="flex justify-between text-xs text-slate-400">
+          <span>Format: <code class="text-blue-400 font-mono">Name, Email, Product, Amount</code></span>
+          <button onclick="loadSample()" class="text-blue-400 underline">+ Sample Data</button>
+        </div>
+        <textarea id="bulk-input" rows="4" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 font-mono text-xs text-slate-200"></textarea>
+        <button onclick="importBulk()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs px-4 py-2 rounded-lg">Import All</button>
+      </div>
+    </div>
+
+    <!-- 3. STATS -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 text-center"><p class="text-[10px] text-slate-400 uppercase font-semibold">Total Invoices</p><h3 id="s-total" class="text-xl font-bold text-white font-mono">0</h3></div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 text-center"><p class="text-[10px] text-slate-400 uppercase font-semibold">Queued</p><h3 id="s-ready" class="text-xl font-bold text-amber-400 font-mono">0</h3></div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 text-center"><p class="text-[10px] text-slate-400 uppercase font-semibold">Sent via Zoho</p><h3 id="s-sent" class="text-xl font-bold text-purple-400 font-mono">0</h3></div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 text-center"><p class="text-[10px] text-slate-400 uppercase font-semibold">Opened &amp; Read</p><h3 id="s-opened" class="text-xl font-bold text-emerald-400 font-mono">0</h3></div>
+    </div>
+
+    <!-- 4. TABLE -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 shadow-xl">
+      <div class="flex justify-between items-center">
+        <h3 class="text-sm font-bold text-white flex items-center">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 mr-2 animate-pulse"></span>
+          Live Invoice Queue &amp; Open Tracker
+        </h3>
+        <div class="flex items-center space-x-2">
+          <input id="search" type="text" placeholder="Search..." oninput="doFilter(this.value)" class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1 text-xs text-slate-200 w-48 focus:outline-none focus:border-blue-500" />
+          <button onclick="clearQueue()" class="text-xs text-slate-500 hover:text-rose-400 bg-slate-950 border border-slate-800 px-2.5 py-1 rounded-lg">Clear</button>
+        </div>
+      </div>
+      <div class="overflow-x-auto border border-slate-800 rounded-lg">
+        <table class="w-full text-xs">
+          <thead><tr class="bg-slate-950 text-slate-400 uppercase border-b border-slate-800">
+            <th class="py-2.5 px-3 text-left">Invoice #</th>
+            <th class="py-2.5 px-3 text-left">Name</th>
+            <th class="py-2.5 px-3 text-left">Email</th>
+            <th class="py-2.5 px-3 text-left">Product</th>
+            <th class="py-2.5 px-3 text-left">Amount</th>
+            <th class="py-2.5 px-3 text-left">Status</th>
+            <th class="py-2.5 px-3 text-right">Action</th>
+          </tr></thead>
+          <tbody id="tbl"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    function load(key, fallback) { try { return JSON.parse(localStorage.getItem('ip_' + key)) || fallback; } catch(e) { return fallback; } }
+    function save(key, val) { try { localStorage.setItem('ip_' + key, JSON.stringify(val)); } catch(e) {} }
+
+    let queue = load('queue', []);
+    let cfg = load('cfg', {
+      clientId: '1000.BONVTOH09HNPUD7VGEHXG11ABVVPLK',
+      clientSecret: '7a131c4a49f2eadea758fd46eccff6b929da59dd5e',
+      orgId: '938042465',
+      region: 'US'
+    });
+    let authToken = load('authToken', null);
+
+    const REGIONS = {
+      US: { accounts: 'https://accounts.zoho.com', api: 'https://www.zohoapis.com' },
+      EU: { accounts: 'https://accounts.zoho.eu', api: 'https://www.zohoapis.eu' },
+      IN: { accounts: 'https://accounts.zoho.in', api: 'https://www.zohoapis.in' },
+      AU: { accounts: 'https://accounts.zoho.com.au', api: 'https://www.zohoapis.com.au' },
+    };
+
+    function toggleSettings() {
+      document.getElementById('settings-panel').classList.toggle('hidden');
+      if (cfg.clientId) document.getElementById('cfg-cid').value = cfg.clientId;
+      if (cfg.clientSecret) document.getElementById('cfg-secret').value = cfg.clientSecret;
+      if (cfg.orgId) document.getElementById('cfg-org').value = cfg.orgId;
+      document.getElementById('cfg-region').value = cfg.region || 'US';
+      updateAuthLink();
+      updateAuthBadge();
+    }
+
+    function saveZohoConfig() {
+      cfg.clientId = document.getElementById('cfg-cid').value.trim();
+      cfg.clientSecret = document.getElementById('cfg-secret').value.trim();
+      cfg.orgId = document.getElementById('cfg-org').value.trim();
+      cfg.region = document.getElementById('cfg-region').value;
+      save('cfg', cfg);
+      updateAuthLink();
+      alert('Credentials saved for this browser session.');
+    }
+
+    function updateAuthLink() {
+      const r = REGIONS[cfg.region] || REGIONS.US;
+      const redirect = window.location.origin + '/api/auth/callback';
+      document.getElementById('auth-link').href = `${r.accounts}/oauth/v2/auth?client_id=${cfg.clientId}&scope=ZohoBooks.fullaccess.all&redirect_uri=${encodeURIComponent(redirect)}&response_type=code&access_type=offline&prompt=consent`;
+    }
+
+    function updateAuthBadge() {
+      const badge = document.getElementById('auth-badge');
+      if (authToken && authToken.access_token) {
+        badge.textContent = '✅ Connected';
+        badge.className = 'text-xs text-emerald-400 font-semibold';
+      } else {
+        badge.textContent = 'Not connected';
+        badge.className = 'text-xs text-slate-500';
+      }
+    }
+
+    function handleAuthCallback() {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      const error = params.get('error');
+      if (error) { alert('Auth failed: ' + error); window.history.replaceState({}, '', window.location.pathname); return; }
+      if (!code) return;
+
+      const r = REGIONS[cfg.region] || REGIONS.US;
+      fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'exchange',
+          code: code,
+          client_id: cfg.clientId,
+          client_secret: cfg.clientSecret,
+          redirect_uri: window.location.origin + '/api/auth/callback',
+          accounts_domain: r.accounts
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.access_token) {
+          authToken = {
+            access_token: data.access_token,
+            refresh_token: data.refresh_token || (authToken && authToken.refresh_token),
+            expires_at: Date.now() + ((data.expires_in || 3600) * 1000) - 60000
+          };
+          save('authToken', authToken);
+          updateAuthBadge();
+          alert('Successfully connected to Zoho Books!');
+        } else {
+          alert('Token exchange error: ' + JSON.stringify(data));
+        }
+        window.history.replaceState({}, '', window.location.pathname);
+      })
+      .catch(err => {
+        alert('Auth error: ' + err.message);
+        window.history.replaceState({}, '', window.location.pathname);
+      });
+    }
+
+    async function getValidToken() {
+      if (!authToken) throw new Error('Not connected to Zoho. Click ⚙️ Zoho Setup and authorize.');
+      if (Date.now() < (authToken.expires_at || 0)) return authToken.access_token;
+      if (authToken.refresh_token) {
+        const r = REGIONS[cfg.region] || REGIONS.US;
+        const res = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'refresh',
+            refresh_token: authToken.refresh_token,
+            client_id: cfg.clientId,
+            client_secret: cfg.clientSecret,
+            accounts_domain: r.accounts
+          })
+        });
+        const data = await res.json();
+        if (data.access_token) {
+          authToken.access_token = data.access_token;
+          authToken.expires_at = Date.now() + ((data.expires_in || 3600) * 1000) - 60000;
+          save('authToken', authToken);
+          return authToken.access_token;
+        }
+      }
+      throw new Error('Please click ⚙️ Zoho Setup -> Authorize Zoho.');
+    }
+
+    function saveTemplateState() {
+      save('tpl_subject', document.getElementById('ed-subject').value);
+      save('tpl_body', document.getElementById('ed-body').value);
+    }
+
+    function loadTemplateState() {
+      const subj = load('tpl_subject', null);
+      const body = load('tpl_body', null);
+      if (subj) document.getElementById('ed-subject').value = subj;
+      if (body) document.getElementById('ed-body').value = body;
+    }
+
+    function getSubjectBody(name, product, amount, invNum, company, dueDate) {
+      let subj = document.getElementById('ed-subject').value.trim() || `Invoice #${invNum} from ${company}`;
+      let body = document.getElementById('ed-body').value.trim() || `Hello ${name},\n\nPlease find attached your invoice #${invNum} for ${product} ($${amount}).\n\nThank you!`;
+
+      const formattedAmount = Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2 });
+      const replacements = {
+        'client_name': name,
+        'invoice_number': invNum || 'INV',
+        'amount': formattedAmount,
+        'product': product,
+        'company_name': company || 'My Store',
+        'due_date': dueDate || '2026-10-15'
+      };
+
+      for (const [k, v] of Object.entries(replacements)) {
+        const re = new RegExp(`\\{\\{${k}\\}\\}`, 'g');
+        subj = subj.replace(re, v);
+        body = body.replace(re, v);
+      }
+
+      if (!body.includes('<p>') && !body.includes('<div>')) {
+        body = body.split('\n').map(l => l.trim() ? `<p style="margin:0 0 10px 0;">${l}</p>` : `<br>`).join('');
+      }
+
+      return { subject: subj, body: body };
+    }
+
+    function insertTag(tag) {
+      const el = document.getElementById('ed-body');
+      const start = el.selectionStart || 0;
+      el.value = el.value.substring(0, start) + tag + el.value.substring(start);
+      el.focus();
+      el.selectionStart = el.selectionEnd = start + tag.length;
+      saveTemplateState();
+    }
+
+    function addToQueue() {
+      const name = document.getElementById('in-name').value.trim();
+      const email = document.getElementById('in-email').value.trim();
+      const product = document.getElementById('in-product').value.trim() || 'Professional Services';
+      const amount = parseFloat(document.getElementById('in-amount').value) || 1500;
+      if (!name || !email || !email.includes('@')) { alert('Please enter customer Name and a valid Email.'); return; }
+
+      queue.push({ id: Date.now(), inv: 'INV-QUEUED', name, email, product, amount, status: 'Queued', opens: 0 });
+      save('queue', queue);
+      ['in-name','in-email','in-product','in-amount'].forEach(id => document.getElementById(id).value = '');
+      render();
+    }
+
+    function toggleBulk() { document.getElementById('bulk-area').classList.toggle('hidden'); }
+    function loadSample() {
+      document.getElementById('bulk-input').value = `Navdeep Singh, navdeep252@aol.com, Cloud Hosting, 2500\nSarah Jenkins, sarah.j@acmeglobal.com, Consulting Retainer, 4200\nJordan Smith, jordan@apexsys.io, Security Audit, 1800`;
+    }
+
+    function importBulk() {
+      const text = document.getElementById('bulk-input').value.trim();
+      if (!text) return;
+      let count = 0;
+      text.split('\n').forEach(line => {
+        const p = line.split(/[,\t]/).map(x => x.trim());
+        if (p.length >= 2 && p.some(x => x.includes('@'))) {
+          const email = p.find(x => x.includes('@'));
+          const nonEmails = p.filter(x => !x.includes('@'));
+          queue.push({ id: Date.now() + Math.random(), inv: 'INV-QUEUED', name: nonEmails[0] || 'Client', email: email, product: nonEmails[1] || 'Services', amount: parseFloat(nonEmails[2]) || 1500, status: 'Queued', opens: 0 });
+          count++;
+        }
+      });
+      save('queue', queue);
+      toggleBulk();
+      render();
+      alert(`Imported ${count} customers into your queue.`);
+    }
+
+    async function sendInvoice(item) {
+      try {
+        const token = await getValidToken();
+        const r = REGIONS[cfg.region] || REGIONS.US;
+        const { subject, body } = getSubjectBody(item.name, item.product, item.amount, item.inv, 'My Store', '2026-10-15');
+
+        const res = await fetch('/api/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: token,
+            org_id: cfg.orgId,
+            api_domain: r.api,
+            name: item.name,
+            email: item.email,
+            amount: item.amount,
+            product: item.product,
+            subject: subject,
+            body: body
+          })
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        item.inv = data.invoiceNumber || 'INV-SENT';
+        item.status = 'Sent';
+        save('queue', queue);
+        return true;
+      } catch (err) {
+        alert(`Error sending to ${item.email}: ${err.message}`);
+        return false;
+      }
+    }
+
+    function sendInstant() {
+      const name = document.getElementById('in-name').value.trim();
+      const email = document.getElementById('in-email').value.trim();
+      const product = document.getElementById('in-product').value.trim() || 'Professional Services';
+      const amount = parseFloat(document.getElementById('in-amount').value) || 1500;
+      if (!name || !email || !email.includes('@')) { alert('Please enter customer Name and Email.'); return; }
+
+      const btn = document.getElementById('btn-instant');
+      btn.disabled = true;
+      btn.textContent = 'Sending via Zoho...';
+
+      const item = { id: Date.now(), inv: 'INV-QUEUED', name, email, product, amount, status: 'Queued', opens: 0 };
+      queue.unshift(item);
+
+      sendInvoice(item).then(ok => {
+        btn.disabled = false;
+        btn.textContent = '⚡ Send Now via Zoho';
+        if (ok) {
+          ['in-name','in-email','in-product','in-amount'].forEach(id => document.getElementById(id).value = '');
+          alert(`Success! Invoice #${item.inv} sent to ${email} via Zoho Books!`);
+        }
+        render();
+      });
+    }
+
+    async function sendAllQueued() {
+      const pending = queue.filter(q => q.status === 'Queued');
+      if (pending.length === 0) { alert('No queued invoices to send.'); return; }
+      const btn = document.getElementById('btn-top-send');
+      btn.disabled = true;
+      btn.textContent = 'Sending All...';
+
+      let sent = 0;
+      for (const item of pending) {
+        const ok = await sendInvoice(item);
+        if (ok) sent++;
+        render();
+      }
+
+      btn.disabled = false;
+      btn.textContent = '🚀 Send All';
+      save('queue', queue);
+      render();
+      alert(`Completed! Dispatched ${sent}/${pending.length} invoices via Zoho Books.`);
+    }
+
+    function sendSingleRow(id, btnElement) {
+      const item = queue.find(q => q.id === id);
+      if (!item) return;
+      if (btnElement) { btnElement.disabled = true; btnElement.textContent = 'Sending...'; }
+
+      sendInvoice(item).then(ok => {
+        render();
+        if (ok) alert(`Success! Invoice #${item.inv} sent to ${item.email}!`);
+      });
+    }
+
+    function simulateOpen(id) {
+      const item = queue.find(q => q.id === id);
+      if (item) {
+        item.status = 'Opened';
+        item.opens = (item.opens || 0) + 1;
+        save('queue', queue);
+        render();
+      }
+    }
+
+    function clearQueue() {
+      if (confirm('Clear all invoices from queue?')) {
+        queue = [];
+        save('queue', queue);
+        render();
+      }
+    }
+
+    let filterQ = '';
+    function doFilter(v) { filterQ = v.toLowerCase(); render(); }
+
+    function render() {
+      const total = queue.length;
+      const ready = queue.filter(q => q.status === 'Queued').length;
+      const sent = queue.filter(q => q.status === 'Sent' || q.status === 'Opened').length;
+      const opened = queue.filter(q => q.status === 'Opened').length;
+
+      document.getElementById('s-total').textContent = total;
+      document.getElementById('s-ready').textContent = ready;
+      document.getElementById('s-sent').textContent = sent;
+      document.getElementById('s-opened').textContent = opened;
+
+      const filtered = queue.filter(q =>
+        (q.name || '').toLowerCase().includes(filterQ) ||
+        (q.email || '').toLowerCase().includes(filterQ) ||
+        (q.product || '').toLowerCase().includes(filterQ) ||
+        (q.inv || '').toLowerCase().includes(filterQ)
+      );
+
+      const tbody = document.getElementById('tbl');
+      tbody.innerHTML = '';
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-slate-500">No invoices in queue. Add customer above or import bulk list.</td></tr>';
+        return;
+      }
+
+      filtered.forEach(q => {
+        const statusBadge =
+          q.status === 'Opened' ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">👁 Opened (' + (q.opens||1) + ')</span>' :
+          q.status === 'Sent' ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">📤 Sent via Zoho</span>' :
+          '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">⏳ Ready</span>';
+
+        const action = q.status === 'Queued'
+          ? `<button onclick="sendSingleRow(${q.id}, this)" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded text-[10px] font-bold transition shadow">Send via Zoho</button>`
+          : `<button onclick="simulateOpen(${q.id})" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded text-[10px] border border-slate-700">Test Open</button>`;
+
+        const tr = document.createElement('tr');
+        tr.className = 'border-b border-slate-800/50 hover:bg-slate-800/30';
+        tr.innerHTML = `
+          <td class="py-2.5 px-3 font-mono font-bold text-blue-400">${q.inv}</td>
+          <td class="py-2.5 px-3 font-semibold text-slate-200">${q.name}</td>
+          <td class="py-2.5 px-3 font-mono text-slate-300">${q.email}</td>
+          <td class="py-2.5 px-3 text-slate-300">${q.product}</td>
+          <td class="py-2.5 px-3 font-mono font-bold text-slate-100">$${Number(q.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+          <td class="py-2.5 px-3">${statusBadge}</td>
+          <td class="py-2.5 px-3 text-right">${action}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Initialize
+    loadTemplateState();
+    handleAuthCallback();
+    updateAuthBadge();
+    render();
+  </script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+backend/.env
+backend/tokens.json
+backend/invoicepulse.db
+backend/__pycache__/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.vercel
