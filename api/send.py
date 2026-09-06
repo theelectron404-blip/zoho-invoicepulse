@@ -26,9 +26,10 @@ class handler(BaseHTTPRequestHandler):
         name = req.get('name', 'Client')
         email = req.get('email')
         amount = float(req.get('amount', 1500))
-        product = req.get('product', 'Services')
+        product = req.get('product', 'Professional Services')
         custom_subject = req.get('subject')
         custom_body = req.get('body')
+        payment_link = req.get('payment_link', 'https://books.zoho.com')
 
         if not token or not org_id or not email:
             self._send_json({'error': 'Missing required fields (token, org_id, email)'}, status=400)
@@ -48,36 +49,86 @@ class handler(BaseHTTPRequestHandler):
             inv_id = str(inv_data['invoice_id'])
             inv_num = inv_data.get('invoice_number', f'INV-{inv_id}')
 
-            # 3. Clean Single-Layer Formatted Email
+            # 3. Format Subject
             formatted_amount = f"${amount:,.2f}"
             subject = custom_subject or f"Invoice #{inv_num} for {name} ({formatted_amount})"
             subject = subject.replace('{{invoice_number}}', inv_num).replace('{{client_name}}', name).replace('{{amount}}', formatted_amount).replace('{{product}}', product)
 
-            # Simple, clean, short body text
-            if custom_body and custom_body.strip():
-                clean_text = custom_body
-            else:
-                clean_text = f"Hello {name},\n\nPlease find attached your official invoice #{inv_num} for {product} ({formatted_amount}).\n\nThank you for your business!"
+            # User custom body text (or clean default)
+            user_msg = custom_body or f"Hello {name},\n\nPlease find attached your official invoice #{inv_num} for {product} ({formatted_amount}).\n\nThank you for your business!"
+            user_msg = user_msg.replace('{{invoice_number}}', inv_num).replace('{{client_name}}', name).replace('{{amount}}', formatted_amount).replace('{{product}}', product)
 
-            # Replace tokens
-            clean_text = clean_text.replace('{{invoice_number}}', inv_num).replace('{{client_name}}', name).replace('{{amount}}', formatted_amount).replace('{{product}}', product)
-
-            # Convert plain line breaks to simple paragraphs
-            body_html = "".join([f"<p style='margin:0 0 12px 0; line-height:1.5;'>{line}</p>" for line in clean_text.split('\n') if line.strip()])
+            # Convert plain linebreaks to clean styled paragraphs
+            msg_html = "".join([f"<p style=\"margin:0 0 12px 0; font-size:14px; line-height:1.6; color:#334155;\">{l}</p>" for l in user_msg.split('\n') if l.strip()])
 
             # Tracking beacon
             host = self.headers.get('Host', 'zoho-invoicepulse.vercel.app')
             beacon_url = f"https://{host}/api/track?id={inv_num}&email={urllib.parse.quote(email)}"
 
-            # Clean, minimalist email format that looks natural in all email apps
-            styled_html = f"""<div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #1e293b; max-width: 580px; padding: 10px 0;">
-  {body_html}
-  <div style="margin: 16px 0; padding: 12px 16px; background: #f8fafc; border-left: 4px solid #2563eb; font-size: 13px;">
-    <strong>Invoice:</strong> #{inv_num} &bull; <strong>Amount:</strong> {formatted_amount} &bull; <strong>Status:</strong> Due
-  </div>
-  <p style="font-size: 12px; color: #64748b; margin-top: 16px;">📎 The official PDF invoice copy is attached to this email.</p>
-  <img src="{beacon_url}" width="1" height="1" alt="" style="display:none!important;" />
-</div>"""
+            # 4. Strict Inline HTML Email Template with Beautiful CTA Button
+            styled_html = f"""<table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#f1f5f9; padding:24px 0; font-family:Arial, sans-serif;">
+  <tr>
+    <td align="center">
+      <table width="560" border="0" cellspacing="0" cellpadding="0" style="max-width:560px; width:100%; background-color:#ffffff; border-radius:10px; border:1px solid #e2e8f0; overflow:hidden; box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+        <!-- Card Header -->
+        <tr>
+          <td style="background-color:#1e40af; padding:22px 28px; text-align:left;">
+            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+              <tr>
+                <td style="font-size:20px; font-weight:bold; color:#ffffff; letter-spacing:-0.02em;">My Store</td>
+                <td align="right" style="font-size:13px; color:#bfdbfe; font-family:monospace; font-weight:bold;">#{inv_num}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <!-- Card Body -->
+        <tr>
+          <td style="padding:28px 28px 20px 28px;">
+            {msg_html}
+
+            <!-- Invoice Item & Total Box -->
+            <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:20px 0; background-color:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">
+              <tr>
+                <td style="padding:16px 20px;">
+                  <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                    <tr>
+                      <td style="font-size:13px; color:#64748b;"><strong>Item / Service:</strong></td>
+                      <td align="right" style="font-size:13px; color:#0f172a; font-weight:600;">{product}</td>
+                    </tr>
+                    <tr>
+                      <td style="font-size:13px; color:#64748b; padding-top:8px;"><strong>Total Amount Due:</strong></td>
+                      <td align="right" style="font-size:18px; color:#1e40af; font-weight:bold; padding-top:8px;">{formatted_amount}</td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Styled CTA Button -->
+            <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin:22px 0 16px 0;">
+              <tr>
+                <td align="center">
+                  <a href="{payment_link}" target="_blank" style="display:inline-block; background-color:#2563eb; color:#ffffff; font-size:14px; font-weight:bold; text-decoration:none; padding:12px 28px; border-radius:6px; box-shadow:0 2px 4px rgba(37,99,235,0.3);">
+                    💳 View &amp; Pay Invoice Online &rarr;
+                  </a>
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin:16px 0 0 0; font-size:12px; color:#64748b; text-align:center;">📎 The official PDF invoice copy is attached to this email.</p>
+          </td>
+        </tr>
+        <!-- Card Footer -->
+        <tr>
+          <td style="background-color:#f8fafc; padding:14px 28px; border-top:1px solid #e2e8f0; font-size:11px; color:#94a3b8; text-align:center;">
+            Sent securely via Zoho Books Invoice Engine &bull; Invoice Ref: {inv_num}
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+<img src="{beacon_url}" width="1" height="1" alt="" style="display:none!important;" />"""
 
             send_payload = {
                 'send_attachment': True,
