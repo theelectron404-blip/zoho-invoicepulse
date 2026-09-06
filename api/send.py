@@ -29,7 +29,6 @@ class handler(BaseHTTPRequestHandler):
         product = req.get('product', 'Professional Services')
         custom_subject = req.get('subject')
         custom_body = req.get('body')
-        payment_link = req.get('payment_link', 'https://books.zoho.com')
 
         if not token or not org_id or not email:
             self._send_json({'error': 'Missing required fields (token, org_id, email)'}, status=400)
@@ -49,46 +48,31 @@ class handler(BaseHTTPRequestHandler):
             inv_id = str(inv_data['invoice_id'])
             inv_num = inv_data.get('invoice_number', f'INV-{inv_id}')
 
-            # 3. Format Subject
+            # 3. Format Subject & Hydrate User's Exact Custom Body
             formatted_amount = f"${amount:,.2f}"
             subject = custom_subject or f"Invoice #{inv_num} for {name} ({formatted_amount})"
             subject = subject.replace('{{invoice_number}}', inv_num).replace('{{client_name}}', name).replace('{{amount}}', formatted_amount).replace('{{product}}', product)
 
-            # User custom body text (or clean default)
+            # Pure user body (hydrated with tokens)
             user_msg = custom_body or f"Hello {name},\n\nPlease find attached your official invoice #{inv_num} for {product} ({formatted_amount}).\n\nThank you for your business!"
             user_msg = user_msg.replace('{{invoice_number}}', inv_num).replace('{{client_name}}', name).replace('{{amount}}', formatted_amount).replace('{{product}}', product)
 
-            # Convert plain linebreaks to clean styled paragraphs
-            msg_html = "".join([f"<p style=\"margin:0 0 12px 0; font-size:14px; line-height:1.6; color:#334155;\">{l}</p>" for l in user_msg.split('\n') if l.strip()])
+            # If user provided raw HTML, use it strictly as-is; if plain text, format linebreaks cleanly
+            if "<" in user_msg and ">" in user_msg:
+                final_html = user_msg
+            else:
+                final_html = "".join([f"<p style=\"margin:0 0 12px 0; font-size:14px; line-height:1.6; color:#334155;\">{l}</p>" for l in user_msg.split('\n') if l.strip()])
 
-            # Tracking beacon
+            # Inject hidden 1x1 tracking pixel at bottom
             host = self.headers.get('Host', 'zoho-invoicepulse.vercel.app')
             beacon_url = f"https://{host}/api/track?id={inv_num}&email={urllib.parse.quote(email)}"
-
-            # 4. Clean Body with Inline Styled Button (NO Blue Header / NO Extra Banner)
-            styled_html = f"""<div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #1e293b; max-width: 580px; padding: 10px 0;">
-  {msg_html}
-
-  <!-- Styled CTA Button -->
-  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 20px 0 16px 0;">
-    <tr>
-      <td align="left">
-        <a href="{payment_link}" target="_blank" style="display: inline-block; background-color: #2563eb; color: #ffffff; font-size: 14px; font-weight: bold; text-decoration: none; padding: 12px 26px; border-radius: 6px;">
-          💳 View &amp; Pay Invoice &rarr;
-        </a>
-      </td>
-    </tr>
-  </table>
-
-  <p style="font-size: 12px; color: #64748b; margin-top: 14px;">📎 The official PDF invoice copy is attached to this email.</p>
-  <img src="{beacon_url}" width="1" height="1" alt="" style="display:none!important;" />
-</div>"""
+            final_html += f'<img src="{beacon_url}" width="1" height="1" alt="" style="display:none!important;" />'
 
             send_payload = {
                 'send_attachment': True,
                 'to_mail_ids': [email],
                 'subject': subject,
-                'body': styled_html
+                'body': final_html
             }
 
             send_url = f"{api_domain}/books/v3/invoices/{inv_id}/email?organization_id={org_id}"
