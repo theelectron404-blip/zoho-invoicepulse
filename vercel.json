@@ -1,23 +1,16 @@
 {
-  "version": 2,
-  "builds": [
+  "rewrites": [
     {
-      "src": "api/*.py",
-      "use": "@vercel/python"
+      "source": "/api/auth",
+      "destination": "/api/auth.py"
     },
     {
-      "src": "index.html",
-      "use": "@vercel/static"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/$1.py"
+      "source": "/api/send",
+      "destination": "/api/send.py"
     },
     {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/api/track",
+      "destination": "/api/track.py"
     }
   ]
 }
