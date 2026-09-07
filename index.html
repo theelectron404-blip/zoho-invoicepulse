@@ -33,7 +33,7 @@
       <div class="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white text-xl shadow-lg shadow-blue-500/20">⚡</div>
       <div>
         <h1 class="font-bold text-slate-100 text-base leading-tight">InvoicePulse</h1>
-        <p class="text-[11px] text-slate-400">Zoho Books Invoicing &bull; Custom Email &bull; Open Tracker</p>
+        <p class="text-[11px] text-slate-400">Zoho Invoice &bull; Custom Email &bull; Open Tracker</p>
       </div>
     </div>
     <div class="flex items-center space-x-3">
@@ -47,7 +47,7 @@
     <!-- SETTINGS PANEL -->
     <div id="settings-panel" class="hidden bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 shadow-xl">
       <div class="flex justify-between items-center">
-        <h2 class="text-sm font-bold text-white">⚙️ Zoho Books API Credentials</h2>
+        <h2 class="text-sm font-bold text-white">⚙️ Zoho Invoice API Credentials</h2>
         <button onclick="toggleSettings()" class="text-slate-400 hover:text-white text-lg">&times;</button>
       </div>
       <p class="text-xs text-slate-400">Credentials are stored privately in your browser's localStorage. Multiple users can use this independently.</p>
@@ -219,7 +219,7 @@
     function updateAuthLink() {
       const r = REGIONS[cfg.region] || REGIONS.US;
       const redirect = window.location.origin + '/api/auth';
-      document.getElementById('auth-link').href = `${r.accounts}/oauth/v2/auth?client_id=${cfg.clientId}&scope=ZohoBooks.fullaccess.all&redirect_uri=${encodeURIComponent(redirect)}&response_type=code&access_type=offline&prompt=consent`;
+      document.getElementById('auth-link').href = `${r.accounts}/oauth/v2/auth?client_id=${cfg.clientId}&scope=ZohoInvoice.fullaccess.all,ZohoBooks.fullaccess.all&redirect_uri=${encodeURIComponent(redirect)}&response_type=code&access_type=offline&prompt=consent`;
     }
 
     function updateAuthBadge() {

@@ -82,12 +82,23 @@ class handler(BaseHTTPRequestHandler):
                 'body': final_html
             }
 
-            send_url = f"{api_domain}/books/v3/invoices/{inv_id}/email?organization_id={org_id}"
+            # Try Zoho Invoice first, fallback to Books
+            send_url = f"{api_domain}/invoice/v3/invoices/{inv_id}/email?organization_id={org_id}"
             req_send = urllib.request.Request(send_url, data=json.dumps(send_payload).encode('utf-8'), headers=headers, method='POST')
-
-            with urllib.request.urlopen(req_send) as send_resp:
-                resp_data = json.loads(send_resp.read().decode('utf-8'))
-                self._send_json({'status': 'sent', 'invoiceNumber': inv_num, 'invoiceId': inv_id, 'zohoResponse': resp_data})
+            try:
+                with urllib.request.urlopen(req_send) as send_resp:
+                    resp_data = json.loads(send_resp.read().decode('utf-8'))
+                    self._send_json({'status': 'sent', 'invoiceNumber': inv_num, 'invoiceId': inv_id, 'zohoResponse': resp_data})
+                    return
+            except urllib.error.HTTPError as e:
+                if e.code in (404, 400):
+                    send_url = f"{api_domain}/books/v3/invoices/{inv_id}/email?organization_id={org_id}"
+                    req_send = urllib.request.Request(send_url, data=json.dumps(send_payload).encode('utf-8'), headers=headers, method='POST')
+                    with urllib.request.urlopen(req_send) as send_resp:
+                        resp_data = json.loads(send_resp.read().decode('utf-8'))
+                        self._send_json({'status': 'sent', 'invoiceNumber': inv_num, 'invoiceId': inv_id, 'zohoResponse': resp_data})
+                        return
+                raise
 
         except urllib.error.HTTPError as e:
             err_text = e.read().decode('utf-8')
@@ -96,37 +107,48 @@ class handler(BaseHTTPRequestHandler):
             self._send_json({'error': str(e)}, status=500)
 
     def _get_or_create_contact(self, api_domain, org_id, headers, name, email):
-        search_url = f"{api_domain}/books/v3/contacts?organization_id={org_id}&email={urllib.parse.quote(email)}"
-        req_search = urllib.request.Request(search_url, headers=headers, method='GET')
-        try:
-            with urllib.request.urlopen(req_search) as resp:
-                data = json.loads(resp.read().decode('utf-8'))
-                contacts = data.get('contacts', [])
-                if contacts:
-                    return str(contacts[0]['contact_id'])
-        except Exception:
-            pass
+        for service in ['invoice', 'books']:
+            search_url = f"{api_domain}/{service}/v3/contacts?organization_id={org_id}&email={urllib.parse.quote(email)}"
+            req_search = urllib.request.Request(search_url, headers=headers, method='GET')
+            try:
+                with urllib.request.urlopen(req_search) as resp:
+                    data = json.loads(resp.read().decode('utf-8'))
+                    contacts = data.get('contacts', [])
+                    if contacts:
+                        return str(contacts[0]['contact_id'])
+            except Exception:
+                continue
 
-        create_url = f"{api_domain}/books/v3/contacts?organization_id={org_id}"
         payload = {
             'contact_name': name or email.split('@')[0],
             'contact_persons': [{'first_name': name, 'email': email, 'is_primary_contact': True}]
         }
-        req_create = urllib.request.Request(create_url, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST')
-        with urllib.request.urlopen(req_create) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-            return str(data['contact']['contact_id'])
+        for service in ['invoice', 'books']:
+            create_url = f"{api_domain}/{service}/v3/contacts?organization_id={org_id}"
+            req_create = urllib.request.Request(create_url, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST')
+            try:
+                with urllib.request.urlopen(req_create) as resp:
+                    data = json.loads(resp.read().decode('utf-8'))
+                    return str(data['contact']['contact_id'])
+            except Exception:
+                continue
+        raise Exception("Could not create or retrieve contact in Zoho Invoice/Books.")
 
     def _create_invoice(self, api_domain, org_id, headers, customer_id, product, amount):
-        url = f"{api_domain}/books/v3/invoices?organization_id={org_id}"
         payload = {
             'customer_id': customer_id,
             'line_items': [{'name': product, 'rate': amount, 'quantity': 1}]
         }
-        req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST')
-        with urllib.request.urlopen(req) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-            return data['invoice']
+        for service in ['invoice', 'books']:
+            url = f"{api_domain}/{service}/v3/invoices?organization_id={org_id}"
+            req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST')
+            try:
+                with urllib.request.urlopen(req) as resp:
+                    data = json.loads(resp.read().decode('utf-8'))
+                    return data['invoice']
+            except Exception:
+                continue
+        raise Exception("Could not create invoice in Zoho Invoice/Books.")
 
     def _send_json(self, data, status=200):
         self.send_response(status)
