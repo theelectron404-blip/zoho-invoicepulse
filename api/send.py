@@ -57,16 +57,16 @@ class handler(BaseHTTPRequestHandler):
             user_msg = custom_body or f"Hello {name},\n\nPlease find attached your official invoice #{inv_num} for {product} ({formatted_amount}).\n\nThank you for your business!"
             user_msg = user_msg.replace('{{invoice_number}}', inv_num).replace('{{client_name}}', name).replace('{{amount}}', formatted_amount).replace('{{product}}', product)
 
-            # If user provided raw HTML, use it strictly as-is; if plain text, format linebreaks cleanly
+            # If user provided raw HTML, use it strictly as-is; if plain text, wrap non-empty lines with compact margins
             if "<" in user_msg and ">" in user_msg:
-                final_html = user_msg
+                final_html = user_msg.strip()
             else:
-                final_html = "".join([f"<p style=\"margin:0 0 12px 0; font-size:14px; line-height:1.6; color:#334155;\">{l}</p>" for l in user_msg.split('\n') if l.strip()])
+                final_html = "".join([f'<p style="margin:0 0 8px 0; font-family:Arial,sans-serif; font-size:14px; line-height:1.4; color:#333333;">{l.strip()}</p>' for l in user_msg.split('\n') if l.strip()])
 
-            # Inject hidden 1x1 tracking pixel at bottom
+            # Inject hidden 1x1 tracking pixel at bottom without adding any block layout spacing
             host = self.headers.get('Host', 'zoho-invoicepulse.vercel.app')
             beacon_url = f"https://{host}/api/track?id={inv_num}&email={urllib.parse.quote(email)}"
-            final_html += f'<img src="{beacon_url}" width="1" height="1" alt="" style="display:none!important;" />'
+            final_html += f'<img src="{beacon_url}" width="1" height="1" alt="" style="display:none!important;margin:0;padding:0;border:0;width:0;height:0;" />'
 
             send_payload = {
                 'send_attachment': True,
