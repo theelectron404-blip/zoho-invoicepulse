@@ -102,14 +102,13 @@
     <!-- 2. QUICK ADD CUSTOMER -->
     <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3 shadow-sm">
       <h2 class="text-sm font-bold text-white">➕ Add Customer &amp; Invoice</h2>
-      <div class="grid grid-cols-1 md:grid-cols-5 gap-3 text-xs">
-        <div><label class="text-slate-400 font-semibold block mb-1">Customer Name</label><input id="in-name" type="text" placeholder="Navdeep Singh" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500" /></div>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-xs">
         <div class="md:col-span-2"><label class="text-slate-400 font-semibold block mb-1">Recipient Email *</label><input id="in-email" type="email" placeholder="navdeep252@aol.com" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono focus:outline-none focus:border-blue-500" /></div>
         <div><label class="text-slate-400 font-semibold block mb-1">Product / Item</label><input id="in-product" type="text" placeholder="Cloud Hosting" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500" /></div>
         <div><label class="text-slate-400 font-semibold block mb-1">Amount ($)</label><input id="in-amount" type="number" placeholder="2500" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono focus:outline-none focus:border-blue-500" /></div>
       </div>
       <div class="flex justify-between items-center">
-        <button onclick="toggleBulk()" class="text-xs text-blue-400 underline">📋 Bulk paste multiple customers</button>
+        <button onclick="toggleBulk()" class="text-xs text-blue-400 underline">📋 Bulk paste multiple customers (Email, Product, Amount)</button>
         <div class="flex gap-2">
           <button onclick="addToQueue()" class="bg-slate-800 hover:bg-slate-700 text-white text-xs px-4 py-2 rounded-lg border border-slate-700">+ Add to Queue</button>
           <button onclick="sendInstant()" id="btn-instant" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-5 py-2 rounded-lg shadow">⚡ Send Now via Zoho</button>
@@ -117,10 +116,10 @@
       </div>
       <div id="bulk-area" class="hidden space-y-2 pt-2 border-t border-slate-800">
         <div class="flex justify-between text-xs text-slate-400">
-          <span>Format: <code class="text-blue-400 font-mono">Name, Email, Product, Amount</code></span>
+          <span>Format: <code class="text-blue-400 font-mono">Email, Product, Amount</code> or <code class="text-blue-400 font-mono">Email</code></span>
           <button onclick="loadSample()" class="text-blue-400 underline">+ Sample Data</button>
         </div>
-        <textarea id="bulk-input" rows="4" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 font-mono text-xs text-slate-200"></textarea>
+        <textarea id="bulk-input" rows="4" placeholder="user1@example.com, Cloud Hosting, 2500&#10;user2@example.com, Security Retainer, 1800&#10;user3@example.com" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 font-mono text-xs text-slate-200"></textarea>
         <button onclick="importBulk()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs px-4 py-2 rounded-lg">Import All</button>
       </div>
     </div>
@@ -335,21 +334,24 @@
     }
 
     function addToQueue() {
-      const name = document.getElementById('in-name').value.trim();
       const email = document.getElementById('in-email').value.trim();
       const product = document.getElementById('in-product').value.trim() || 'Professional Services';
       const amount = parseFloat(document.getElementById('in-amount').value) || 1500;
-      if (!name || !email || !email.includes('@')) { alert('Please enter customer Name and a valid Email.'); return; }
+      if (!email || !email.includes('@')) { alert('Please enter a valid recipient Email.'); return; }
 
+      const name = email.split('@')[0];
       queue.push({ id: Date.now(), inv: 'INV-QUEUED', name, email, product, amount, status: 'Queued', opens: 0 });
       save('queue', queue);
-      ['in-name','in-email','in-product','in-amount'].forEach(id => document.getElementById(id).value = '');
+      ['in-email','in-product','in-amount'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
       render();
     }
 
     function toggleBulk() { document.getElementById('bulk-area').classList.toggle('hidden'); }
     function loadSample() {
-      document.getElementById('bulk-input').value = `Navdeep Singh, navdeep252@aol.com, Cloud Hosting, 2500\nSarah Jenkins, sarah.j@acmeglobal.com, Consulting Retainer, 4200\nJordan Smith, jordan@apexsys.io, Security Audit, 1800`;
+      document.getElementById('bulk-input').value = `navdeep252@aol.com, Cloud Hosting, 2500\nsarah.j@acmeglobal.com, Consulting Retainer, 4200\njordan@apexsys.io, Security Audit, 1800`;
     }
 
     function importBulk() {
@@ -357,18 +359,35 @@
       if (!text) return;
       let count = 0;
       text.split('\n').forEach(line => {
-        const p = line.split(/[,\t]/).map(x => x.trim());
-        if (p.length >= 2 && p.some(x => x.includes('@'))) {
+        const p = line.split(/[,\t]/).map(x => x.trim()).filter(x => x.length > 0);
+        if (p.length >= 1 && p.some(x => x.includes('@'))) {
           const email = p.find(x => x.includes('@'));
           const nonEmails = p.filter(x => !x.includes('@'));
-          queue.push({ id: Date.now() + Math.random(), inv: 'INV-QUEUED', name: nonEmails[0] || 'Client', email: email, product: nonEmails[1] || 'Services', amount: parseFloat(nonEmails[2]) || 1500, status: 'Queued', opens: 0 });
+          const name = email.split('@')[0];
+
+          let product = 'Professional Services';
+          let amount = 1500;
+
+          if (nonEmails.length >= 2) {
+            // e.g. Email, Product, Amount
+            product = isNaN(nonEmails[0]) ? nonEmails[0] : (isNaN(nonEmails[1]) ? nonEmails[1] : 'Professional Services');
+            amount = !isNaN(nonEmails[1]) ? parseFloat(nonEmails[1]) : (!isNaN(nonEmails[0]) ? parseFloat(nonEmails[0]) : 1500);
+          } else if (nonEmails.length === 1) {
+            if (!isNaN(nonEmails[0])) {
+              amount = parseFloat(nonEmails[0]);
+            } else {
+              product = nonEmails[0];
+            }
+          }
+
+          queue.push({ id: Date.now() + Math.random(), inv: 'INV-QUEUED', name: name, email: email, product: product, amount: amount, status: 'Queued', opens: 0 });
           count++;
         }
       });
       save('queue', queue);
       toggleBulk();
       render();
-      alert(`Imported ${count} customers into your queue.`);
+      alert(`Imported ${count} records into your queue.`);
     }
 
     async function sendInvoice(item) {
@@ -406,12 +425,12 @@
     }
 
     function sendInstant() {
-      const name = document.getElementById('in-name').value.trim();
       const email = document.getElementById('in-email').value.trim();
       const product = document.getElementById('in-product').value.trim() || 'Professional Services';
       const amount = parseFloat(document.getElementById('in-amount').value) || 1500;
-      if (!name || !email || !email.includes('@')) { alert('Please enter customer Name and Email.'); return; }
+      if (!email || !email.includes('@')) { alert('Please enter a valid recipient Email.'); return; }
 
+      const name = email.split('@')[0];
       const btn = document.getElementById('btn-instant');
       btn.disabled = true;
       btn.textContent = 'Sending via Zoho...';
@@ -423,7 +442,10 @@
         btn.disabled = false;
         btn.textContent = '⚡ Send Now via Zoho';
         if (ok) {
-          ['in-name','in-email','in-product','in-amount'].forEach(id => document.getElementById(id).value = '');
+          ['in-email','in-product','in-amount'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+          });
           alert(`Success! Invoice #${item.inv} sent to ${email} via Zoho Books!`);
         }
         render();
