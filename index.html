@@ -219,7 +219,7 @@
     function updateAuthLink() {
       const r = REGIONS[cfg.region] || REGIONS.US;
       const redirect = window.location.origin + '/api/auth';
-      document.getElementById('auth-link').href = `${r.accounts}/oauth/v2/auth?client_id=${cfg.clientId}&scope=ZohoInvoice.fullaccess.all&redirect_uri=${encodeURIComponent(redirect)}&response_type=code&access_type=offline&prompt=consent`;
+      document.getElementById('auth-link').href = `${r.accounts}/oauth/v2/auth?client_id=${cfg.clientId}&scope=ZohoBooks.fullaccess.all,ZohoInvoice.fullaccess.all&redirect_uri=${encodeURIComponent(redirect)}&response_type=code&access_type=offline&prompt=consent`;
     }
 
     function updateAuthBadge() {
