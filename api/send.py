@@ -57,13 +57,23 @@ class handler(BaseHTTPRequestHandler):
             user_msg = custom_body or f"Hello {name},\n\nPlease find attached your official invoice #{inv_num} for {product} ({formatted_amount}).\n\nThank you for your business!"
             user_msg = user_msg.replace('{{invoice_number}}', inv_num).replace('{{client_name}}', name).replace('{{amount}}', formatted_amount).replace('{{product}}', product)
 
-            # Strip all leading/trailing whitespace
-            final_html = user_msg.strip()
+            # Clean raw HTML: collapse newline gaps that cause Zoho / email clients to inject extra vertical spacing
+            user_msg = user_msg.strip()
+            if "<" in user_msg and ">" in user_msg:
+                # Remove linebreaks between HTML tags so email clients don't convert them to whitespace/br
+                import re
+                final_html = re.sub(r'>\s*\n+\s*<', '><', user_msg)
+            else:
+                final_html = user_msg
 
-            # Inject hidden 1x1 tracking pixel at bottom
+            # Inject hidden 1x1 tracking pixel inside body or at end
             host = self.headers.get('Host', 'zoho-invoicepulse.vercel.app')
             beacon_url = f"https://{host}/api/track?id={inv_num}&email={urllib.parse.quote(email)}"
-            final_html += f'<img src="{beacon_url}" width="1" height="1" alt="" style="display:none!important;" />'
+            pixel_tag = f'<img src="{beacon_url}" width="1" height="1" alt="" style="display:none!important;" />'
+            if "</body>" in final_html:
+                final_html = final_html.replace("</body>", f"{pixel_tag}</body>")
+            else:
+                final_html += pixel_tag
 
             send_payload = {
                 'send_attachment': True,
