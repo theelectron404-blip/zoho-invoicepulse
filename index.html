@@ -114,13 +114,27 @@
           <button onclick="sendInstant()" id="btn-instant" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-5 py-2 rounded-lg shadow">⚡ Send Now via Zoho</button>
         </div>
       </div>
-      <div id="bulk-area" class="hidden space-y-2 pt-2 border-t border-slate-800">
+      <div id="bulk-area" class="hidden space-y-3 pt-3 border-t border-slate-800">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-950 p-3 rounded-lg border border-slate-800/80">
+          <div>
+            <label class="text-[11px] text-slate-300 font-semibold block mb-1">📦 Global Product / Service Name (Applied to all imported)</label>
+            <input id="bulk-def-product" type="text" placeholder="e.g. Cloud Hosting &amp; Security" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500" />
+          </div>
+          <div>
+            <label class="text-[11px] text-slate-300 font-semibold block mb-1">💰 Global Amount ($) (Applied to all imported)</label>
+            <input id="bulk-def-amount" type="number" placeholder="e.g. 2500" class="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-blue-500" />
+          </div>
+        </div>
+
         <div class="flex justify-between text-xs text-slate-400">
-          <span>Format: <code class="text-blue-400 font-mono">Email, Product, Amount</code> or <code class="text-blue-400 font-mono">Email</code></span>
+          <span>Paste emails (one per line, or with custom product/amount if specific):</span>
           <button onclick="loadSample()" class="text-blue-400 underline">+ Sample Data</button>
         </div>
-        <textarea id="bulk-input" rows="4" placeholder="user1@example.com, Cloud Hosting, 2500&#10;user2@example.com, Security Retainer, 1800&#10;user3@example.com" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 font-mono text-xs text-slate-200"></textarea>
-        <button onclick="importBulk()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs px-4 py-2 rounded-lg">Import All</button>
+        <textarea id="bulk-input" rows="5" placeholder="user1@example.com&#10;user2@example.com&#10;user3@example.com&#10;...or user4@example.com, Custom Product, 4500" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 font-mono text-xs text-slate-200 focus:outline-none focus:border-blue-500"></textarea>
+        <div class="flex justify-between items-center">
+          <p class="text-[11px] text-slate-500">💡 Any emails pasted without product/amount will use the Global values above.</p>
+          <button onclick="importBulk()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-5 py-2 rounded-lg shadow">📥 Import All into Queue</button>
+        </div>
       </div>
     </div>
 
@@ -357,6 +371,10 @@
     function importBulk() {
       const text = document.getElementById('bulk-input').value.trim();
       if (!text) return;
+
+      const globalProduct = document.getElementById('bulk-def-product').value.trim() || 'Professional Services';
+      const globalAmount = parseFloat(document.getElementById('bulk-def-amount').value) || 1500;
+
       let count = 0;
       text.split('\n').forEach(line => {
         const p = line.split(/[,\t]/).map(x => x.trim()).filter(x => x.length > 0);
@@ -365,13 +383,13 @@
           const nonEmails = p.filter(x => !x.includes('@'));
           const name = email.split('@')[0];
 
-          let product = 'Professional Services';
-          let amount = 1500;
+          let product = globalProduct;
+          let amount = globalAmount;
 
           if (nonEmails.length >= 2) {
-            // e.g. Email, Product, Amount
-            product = isNaN(nonEmails[0]) ? nonEmails[0] : (isNaN(nonEmails[1]) ? nonEmails[1] : 'Professional Services');
-            amount = !isNaN(nonEmails[1]) ? parseFloat(nonEmails[1]) : (!isNaN(nonEmails[0]) ? parseFloat(nonEmails[0]) : 1500);
+            // e.g. Email, Specific Product, Specific Amount
+            product = isNaN(nonEmails[0]) ? nonEmails[0] : (isNaN(nonEmails[1]) ? nonEmails[1] : globalProduct);
+            amount = !isNaN(nonEmails[1]) ? parseFloat(nonEmails[1]) : (!isNaN(nonEmails[0]) ? parseFloat(nonEmails[0]) : globalAmount);
           } else if (nonEmails.length === 1) {
             if (!isNaN(nonEmails[0])) {
               amount = parseFloat(nonEmails[0]);
@@ -387,7 +405,7 @@
       save('queue', queue);
       toggleBulk();
       render();
-      alert(`Imported ${count} records into your queue.`);
+      alert(`Imported ${count} records with Product "${globalProduct}" ($${globalAmount.toLocaleString()}) into your queue.`);
     }
 
     async function sendInvoice(item) {
