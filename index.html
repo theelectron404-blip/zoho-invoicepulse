@@ -321,12 +321,7 @@
         body = body.replace(re, v);
       }
 
-      // If user provided HTML, preserve it directly without double-spacing
-      // If plain text, convert lines cleanly without adding redundant blank line breaks
-      if (!body.includes('<') || !body.includes('>')) {
-        body = body.split('\n').filter(l => l.trim().length > 0).map(l => `<p style="margin:0 0 8px 0; font-family:Arial,sans-serif; font-size:14px; line-height:1.4; color:#333333;">${l.trim()}</p>`).join('');
-      }
-
+      // Pass user body directly without adding ANY tags, wrappers, or extra spacing
       return { subject: subj, body: body };
     }
 
