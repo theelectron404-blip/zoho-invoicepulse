@@ -457,6 +457,7 @@
       if (btnElement) { btnElement.disabled = true; btnElement.textContent = 'Sending...'; }
 
       sendInvoice(item).then(ok => {
+        if (btnElement) { btnElement.disabled = false; btnElement.textContent = 'Send via Zoho'; }
         render();
         if (ok) alert(`Success! Invoice #${item.inv} sent to ${item.email}!`);
       });
