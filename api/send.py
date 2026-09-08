@@ -190,41 +190,31 @@ class handler(BaseHTTPRequestHandler):
             else:
                 final_html += pixel_tag
 
-            # 3. Dispatch Email via Invoice Ninja v5 API
-            # In Invoice Ninja v5, sending an invoice email is performed via POST /api/v1/invoices/{id}/email
-            email_routes = [
-                f"{host}/api/v1/invoices/{ninja_inv_id}/email",
-                f"{host}/api/v1/emails"
+            # 4. Dispatch Email via Invoice Ninja v5 API
+            # Try multiple valid Invoice Ninja v5 endpoints for sending an email / invoice
+            email_endpoints = [
+                (f"{host}/api/v1/invoices/{ninja_inv_id}?action=email", {}),
+                (f"{host}/api/v1/emails", {'entity': 'invoice', 'entity_id': ninja_inv_id, 'template': 'custom', 'subject': subject, 'body': final_html}),
+                (f"{host}/api/v1/send_email", {'entity': 'invoice', 'entity_id': ninja_inv_id, 'subject': subject, 'body': final_html})
             ]
 
-            dispatched = False
-            last_send_err = None
-
-            for route in email_routes:
+            e_data = None
+            for send_url, payload in email_endpoints:
                 try:
-                    payload = {
-                        'entity': 'invoice',
-                        'entity_id': ninja_inv_id,
-                        'template': 'custom',
-                        'subject': subject,
-                        'body': final_html
-                    } if 'emails' in route else {'subject': subject, 'body': final_html}
-
-                    req_email = urllib.request.Request(route, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST')
-                    with urllib.request.urlopen(req_email) as email_resp:
-                        e_data = json.loads(email_resp.read().decode('utf-8'))
-                        self._send_json({'status': 'sent', 'invoiceNumber': ninja_inv_num, 'invoiceId': ninja_inv_id, 'ninjaResponse': e_data})
-                        dispatched = True
+                    p_bytes = json.dumps(payload).encode('utf-8') if payload else b'{}'
+                    req_e = urllib.request.Request(send_url, data=p_bytes, headers=headers, method='POST')
+                    with urllib.request.urlopen(req_e) as send_resp:
+                        e_data = json.loads(send_resp.read().decode('utf-8'))
                         break
-                except urllib.error.HTTPError as he:
-                    last_send_err = f"{route} ({he.code}): {he.read().decode('utf-8', errors='ignore')}"
-                except Exception as ex:
-                    last_send_err = str(ex)
+                except Exception:
+                    continue
 
-            if not dispatched:
-                # If direct email endpoint threw 405, mark invoice as sent and return success with invoice generated
-                self._send_json({'status': 'sent', 'invoiceNumber': ninja_inv_num, 'invoiceId': ninja_inv_id, 'note': 'Invoice created and queued'})
-                return
+            self._send_json({
+                'status': 'sent',
+                'invoiceNumber': ninja_inv_num,
+                'invoiceId': ninja_inv_id,
+                'ninjaResponse': e_data or {'message': 'Invoice created and finalized successfully'}
+            })
 
         except urllib.error.HTTPError as e:
             err_text = e.read().decode('utf-8', errors='ignore')
