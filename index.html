@@ -558,18 +558,20 @@
       btn.textContent = '🚀 Send All';
       save('queue', queue);
       render();
-      alert(`Completed! Dispatched ${sent}/${pending.length} invoices via Zoho Invoice.`);
+      const provName = provider === 'invoiceninja' ? 'Invoice Ninja' : 'Zoho Invoice';
+      alert(`Completed! Dispatched ${sent}/${pending.length} invoices via ${provName}.`);
     }
 
     function sendSingleRow(id, btnElement) {
       const item = queue.find(q => q.id === id);
       if (!item) return;
+      const provName = provider === 'invoiceninja' ? 'Invoice Ninja' : 'Zoho';
       if (btnElement) { btnElement.disabled = true; btnElement.textContent = 'Sending...'; }
 
       sendInvoice(item).then(ok => {
-        if (btnElement) { btnElement.disabled = false; btnElement.textContent = 'Send via Zoho'; }
+        if (btnElement) { btnElement.disabled = false; btnElement.textContent = `Send (${provName})`; }
         render();
-        if (ok) alert(`Success! Invoice #${item.inv} sent to ${item.email}!`);
+        if (ok) alert(`Success! Invoice #${item.inv} sent to ${item.email} via ${provName}!`);
       });
     }
 
@@ -612,6 +614,7 @@
         (q.inv || '').toLowerCase().includes(filterQ)
       );
 
+      const provName = provider === 'invoiceninja' ? 'Ninja' : 'Zoho';
       const tbody = document.getElementById('tbl');
       tbody.innerHTML = '';
       if (filtered.length === 0) {
@@ -622,11 +625,11 @@
       filtered.forEach(q => {
         const statusBadge =
           q.status === 'Opened' ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">👁 Opened (' + (q.opens||1) + ')</span>' :
-          q.status === 'Sent' ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">📤 Sent via Zoho</span>' :
+          q.status === 'Sent' ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">📤 Sent (' + (q.inv.startsWith('NINJA') ? 'Ninja' : 'Zoho') + ')</span>' :
           '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">⏳ Ready</span>';
 
         const action = q.status === 'Queued'
-          ? `<button onclick="sendSingleRow(${q.id}, this)" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded text-[10px] font-bold transition shadow">Send via Zoho</button>`
+          ? `<button onclick="sendSingleRow(${q.id}, this)" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1 rounded text-[10px] font-bold transition shadow">Send (${provName})</button>`
           : `<button onclick="simulateOpen(${q.id})" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded text-[10px] border border-slate-700">Test Open</button>`;
 
         const tr = document.createElement('tr');
@@ -645,6 +648,7 @@
     }
 
     // Initialize
+    switchProviderTab(provider);
     loadTemplateState();
     handleAuthCallback();
     updateAuthBadge();
