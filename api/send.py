@@ -2,6 +2,7 @@ from http.server import BaseHTTPRequestHandler
 import json
 import urllib.request
 import urllib.parse
+import re
 
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
@@ -20,7 +21,6 @@ class handler(BaseHTTPRequestHandler):
             self._send_json({'error': 'Invalid JSON'}, status=400)
             return
 
-        provider = req.get('provider', 'zoho')
         name = req.get('name', 'Client')
         email = req.get('email')
         amount = float(req.get('amount', 1500))
@@ -28,27 +28,16 @@ class handler(BaseHTTPRequestHandler):
         custom_subject = req.get('subject')
         custom_body = req.get('body')
 
-        if not email:
-            self._send_json({'error': 'Missing required recipient email'}, status=400)
-            return
-
-        # 1. Invoice Ninja Provider Flow
-        if provider == 'invoiceninja':
-            ninja_host = req.get('ninja_host', 'https://app.invoicing.co').rstrip('/')
-            ninja_key = req.get('ninja_key')
-            if not ninja_key:
-                self._send_json({'error': 'Missing Invoice Ninja API Token'}, status=400)
-                return
-            self._handle_invoiceninja(ninja_host, ninja_key, name, email, product, amount, custom_subject, custom_body)
-            return
-
-        # 2. Zoho Provider Flow
         token = req.get('token')
         org_id = req.get('org_id')
         api_domain = req.get('api_domain', 'https://www.zohoapis.com')
 
+        if not email:
+            self._send_json({'error': 'Missing required recipient email'}, status=400)
+            return
+
         if not token or not org_id:
-            self._send_json({'error': 'Missing required fields (token, org_id)'}, status=400)
+            self._send_json({'error': 'Missing required Zoho credentials (token, org_id)'}, status=400)
             return
 
         headers = {
@@ -70,12 +59,11 @@ class handler(BaseHTTPRequestHandler):
             subject = custom_subject or f"Invoice #{inv_num} for {name} ({formatted_amount})"
             subject = subject.replace('{{invoice_number}}', inv_num).replace('{{client_name}}', name).replace('{{amount}}', formatted_amount).replace('{{product}}', product)
 
-            # Clean raw HTML: collapse newline gaps that cause Zoho / email clients to inject extra vertical spacing
+            # Clean raw HTML: collapse newline gaps that cause email clients to inject extra vertical spacing
             user_msg = custom_body or f"Hello {name},\n\nPlease find attached your official invoice #{inv_num} for {product} ({formatted_amount}).\n\nThank you for your business!"
-            user_msg = user_msg.replace('{{invoice_number}}', inv_num).replace('{{client_name}}', name).replace('{{amount}}', formatted_amount).replace('{{product}}', product)
-            user_msg = user_msg.strip()
+            user_msg = user_msg.replace('{{invoice_number}}', inv_num).replace('{{client_name}}', name).replace('{{amount}}', formatted_amount).replace('{{product}}', product).strip()
+
             if "<" in user_msg and ">" in user_msg:
-                import re
                 final_html = re.sub(r'>\s*\n+\s*<', '><', user_msg)
             else:
                 final_html = user_msg
@@ -115,135 +103,8 @@ class handler(BaseHTTPRequestHandler):
                 raise
 
         except urllib.error.HTTPError as e:
-            err_text = e.read().decode('utf-8')
-            self._send_json({'error': f"Zoho API Error ({e.code}): {err_text}"}, status=e.code)
-        except Exception as e:
-            self._send_json({'error': str(e)}, status=500)
-
-    def _handle_invoiceninja(self, host, api_key, name, email, product, amount, custom_subject, custom_body):
-        headers = {
-            'X-Api-Token': api_key,
-            'X-Requested-With': 'XMLHttpRequest',
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-
-        try:
-            # 1. Find or create client in Invoice Ninja
-            client_search_url = f"{host}/api/v1/clients?email={urllib.parse.quote(email)}"
-            req_c_search = urllib.request.Request(client_search_url, headers=headers, method='GET')
-            client_id = None
-            try:
-                with urllib.request.urlopen(req_c_search) as c_resp:
-                    c_data = json.loads(c_resp.read().decode('utf-8'))
-                    clients = c_data.get('data', [])
-                    if clients:
-                        client_id = clients[0].get('id')
-            except Exception:
-                pass
-
-            if not client_id:
-                client_create_url = f"{host}/api/v1/clients"
-                clean_name = name or email.split('@')[0]
-                c_payload = {
-                    'name': clean_name,
-                    'contacts': [{'first_name': clean_name, 'email': email, 'send_email': True}]
-                }
-                req_c_create = urllib.request.Request(client_create_url, data=json.dumps(c_payload).encode('utf-8'), headers=headers, method='POST')
-                with urllib.request.urlopen(req_c_create) as c_resp:
-                    c_data = json.loads(c_resp.read().decode('utf-8'))
-                    client_id = c_data['data']['id']
-
-            # 2. Create Invoice in Invoice Ninja (Clean line items, without embedding HTML into PDF notes)
-            inv_create_url = f"{host}/api/v1/invoices"
-            formatted_amount = f"${amount:,.2f}"
-            inv_payload = {
-                'client_id': client_id,
-                'line_items': [{'notes': product, 'cost': amount, 'quantity': 1}],
-                'auto_bill_enabled': False
-            }
-            req_inv = urllib.request.Request(inv_create_url, data=json.dumps(inv_payload).encode('utf-8'), headers=headers, method='POST')
-            with urllib.request.urlopen(req_inv) as inv_resp:
-                inv_data = json.loads(inv_resp.read().decode('utf-8'))['data']
-                ninja_inv_id = inv_data['id']
-                ninja_inv_num = inv_data.get('number', f'NINJA-{ninja_inv_id}')
-
-            # 3. Format Custom Email Subject & HTML Body
-            subject = custom_subject or f"Invoice #{ninja_inv_num} for {name} ({formatted_amount})"
-            subject = subject.replace('{{invoice_number}}', ninja_inv_num).replace('{{client_name}}', name).replace('{{amount}}', formatted_amount).replace('{{product}}', product)
-
-            user_msg = custom_body or f"Hello {name},\n\nPlease find attached your official invoice #{ninja_inv_num} for {product} ({formatted_amount}).\n\nThank you for your business!"
-            user_msg = user_msg.replace('{{invoice_number}}', ninja_inv_num).replace('{{client_name}}', name).replace('{{amount}}', formatted_amount).replace('{{product}}', product).strip()
-
-            if "<" in user_msg and ">" in user_msg:
-                import re
-                final_html = re.sub(r'>\s*\n+\s*<', '><', user_msg)
-            else:
-                final_html = user_msg
-
-            server_host = self.headers.get('Host', 'zoho-invoicepulse.vercel.app')
-            beacon_url = f"https://{server_host}/api/track?id={ninja_inv_num}&email={urllib.parse.quote(email)}"
-            pixel_tag = f'<img src="{beacon_url}" width="1" height="1" alt="" style="display:none!important;" />'
-            if "</body>" in final_html:
-                final_html = final_html.replace("</body>", f"{pixel_tag}</body>")
-            else:
-                final_html += pixel_tag
-
-            # 4. In Invoice Ninja v5:
-            # - Transition invoice from DRAFT -> SENT / MARK SENT
-            # - Send email to recipient with custom HTML body and subject
-            email_endpoints = [
-                # Invoice Ninja v5 custom email endpoint
-                (
-                    f"{host}/api/v1/emails",
-                    {
-                        'entity': 'invoice',
-                        'entity_id': ninja_inv_id,
-                        'template': 'custom',
-                        'subject': subject,
-                        'body': final_html
-                    }
-                ),
-                # Direct invoice action email endpoint
-                (
-                    f"{host}/api/v1/invoices/{ninja_inv_id}/email",
-                    {
-                        'subject': subject,
-                        'body': final_html
-                    }
-                ),
-                # Action endpoint to mark sent and trigger email
-                (
-                    f"{host}/api/v1/invoices/{ninja_inv_id}?action=email",
-                    {
-                        'subject': subject,
-                        'body': final_html
-                    }
-                )
-            ]
-
-            e_data = None
-            for send_url, p_body in email_endpoints:
-                try:
-                    p_bytes = json.dumps(p_body).encode('utf-8')
-                    req_e = urllib.request.Request(send_url, data=p_bytes, headers=headers, method='POST')
-                    with urllib.request.urlopen(req_e) as send_resp:
-                        e_data = json.loads(send_resp.read().decode('utf-8'))
-                        break
-                except Exception:
-                    continue
-
-            self._send_json({
-                'status': 'sent',
-                'invoiceNumber': ninja_inv_num,
-                'invoiceId': ninja_inv_id,
-                'ninjaResponse': e_data or {'message': 'Invoice created and dispatched'}
-            })
-
-        except urllib.error.HTTPError as e:
             err_text = e.read().decode('utf-8', errors='ignore')
-            self._send_json({'error': f"Invoice Ninja API Error ({e.code}): {err_text}"}, status=e.code)
+            self._send_json({'error': f"Zoho API Error ({e.code}): {err_text}"}, status=e.code)
         except Exception as e:
             self._send_json({'error': str(e)}, status=500)
 
