@@ -190,30 +190,65 @@ class handler(BaseHTTPRequestHandler):
             else:
                 final_html += pixel_tag
 
-            # 4. Dispatch Email via Invoice Ninja v5 API
-            # Try multiple valid Invoice Ninja v5 endpoints for sending an email / invoice
-            email_endpoints = [
-                (f"{host}/api/v1/invoices/{ninja_inv_id}?action=email", {}),
-                (f"{host}/api/v1/emails", {'entity': 'invoice', 'entity_id': ninja_inv_id, 'template': 'custom', 'subject': subject, 'body': final_html}),
-                (f"{host}/api/v1/send_email", {'entity': 'invoice', 'entity_id': ninja_inv_id, 'subject': subject, 'body': final_html})
+            # 4. In Invoice Ninja v5:
+            # Action endpoint to transition from DRAFT to SENT and deliver email:
+            # POST /api/v1/invoices/bulk with action: 'email'
+            # Or POST /api/v1/invoices/{id}/email
+            # Or POST /api/v1/emails with custom template
+            email_payloads = [
+                (
+                    f"{host}/api/v1/invoices/bulk",
+                    {
+                        'action': 'email',
+                        'ids': [ninja_inv_id],
+                        'subject': subject,
+                        'body': final_html
+                    }
+                ),
+                (
+                    f"{host}/api/v1/emails",
+                    {
+                        'entity': 'invoice',
+                        'entity_id': ninja_inv_id,
+                        'template': 'custom',
+                        'subject': subject,
+                        'body': final_html
+                    }
+                ),
+                (
+                    f"{host}/api/v1/invoices/{ninja_inv_id}/email",
+                    {
+                        'subject': subject,
+                        'body': final_html
+                    }
+                )
             ]
 
+            send_success = False
+            last_err_msg = ""
             e_data = None
-            for send_url, payload in email_endpoints:
+
+            for send_url, p_data in email_payloads:
                 try:
-                    p_bytes = json.dumps(payload).encode('utf-8') if payload else b'{}'
+                    p_bytes = json.dumps(p_data).encode('utf-8')
                     req_e = urllib.request.Request(send_url, data=p_bytes, headers=headers, method='POST')
                     with urllib.request.urlopen(req_e) as send_resp:
                         e_data = json.loads(send_resp.read().decode('utf-8'))
+                        send_success = True
                         break
-                except Exception:
-                    continue
+                except urllib.error.HTTPError as he:
+                    last_err_msg = f"{he.code}: {he.read().decode('utf-8', errors='ignore')}"
+                except Exception as ex:
+                    last_err_msg = str(ex)
+
+            if not send_success:
+                raise Exception(f"Invoice #{ninja_inv_num} was created, but failed to send email: {last_err_msg}")
 
             self._send_json({
                 'status': 'sent',
                 'invoiceNumber': ninja_inv_num,
                 'invoiceId': ninja_inv_id,
-                'ninjaResponse': e_data or {'message': 'Invoice created and finalized successfully'}
+                'ninjaResponse': e_data
             })
 
         except urllib.error.HTTPError as e:
