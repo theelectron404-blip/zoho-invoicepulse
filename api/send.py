@@ -155,15 +155,26 @@ class handler(BaseHTTPRequestHandler):
                     c_data = json.loads(c_resp.read().decode('utf-8'))
                     client_id = c_data['data']['id']
 
-            # 2. Create and automatically Email Invoice in Invoice Ninja
-            # In Invoice Ninja v5:
-            # - auto_bill_enabled: False
-            # - email_invoice: True (automatically sends the email upon creation)
-            # - terms / public_notes can carry the custom message, and the action endpoint transitions to sent
+            # 2. Create Invoice in Invoice Ninja (Clean line items, without embedding HTML into PDF notes)
+            inv_create_url = f"{host}/api/v1/invoices"
             formatted_amount = f"${amount:,.2f}"
-            subject = custom_subject or f"Invoice for {name} ({formatted_amount})"
-            user_msg = custom_body or f"Hello {name},\n\nPlease find attached your official invoice for {product} ({formatted_amount}).\n\nThank you for your business!"
-            user_msg = user_msg.replace('{{client_name}}', name).replace('{{amount}}', formatted_amount).replace('{{product}}', product).strip()
+            inv_payload = {
+                'client_id': client_id,
+                'line_items': [{'notes': product, 'cost': amount, 'quantity': 1}],
+                'auto_bill_enabled': False
+            }
+            req_inv = urllib.request.Request(inv_create_url, data=json.dumps(inv_payload).encode('utf-8'), headers=headers, method='POST')
+            with urllib.request.urlopen(req_inv) as inv_resp:
+                inv_data = json.loads(inv_resp.read().decode('utf-8'))['data']
+                ninja_inv_id = inv_data['id']
+                ninja_inv_num = inv_data.get('number', f'NINJA-{ninja_inv_id}')
+
+            # 3. Format Custom Email Subject & HTML Body
+            subject = custom_subject or f"Invoice #{ninja_inv_num} for {name} ({formatted_amount})"
+            subject = subject.replace('{{invoice_number}}', ninja_inv_num).replace('{{client_name}}', name).replace('{{amount}}', formatted_amount).replace('{{product}}', product)
+
+            user_msg = custom_body or f"Hello {name},\n\nPlease find attached your official invoice #{ninja_inv_num} for {product} ({formatted_amount}).\n\nThank you for your business!"
+            user_msg = user_msg.replace('{{invoice_number}}', ninja_inv_num).replace('{{client_name}}', name).replace('{{amount}}', formatted_amount).replace('{{product}}', product).strip()
 
             if "<" in user_msg and ">" in user_msg:
                 import re
@@ -172,40 +183,53 @@ class handler(BaseHTTPRequestHandler):
                 final_html = user_msg
 
             server_host = self.headers.get('Host', 'zoho-invoicepulse.vercel.app')
-            beacon_url = f"https://{server_host}/api/track?email={urllib.parse.quote(email)}"
+            beacon_url = f"https://{server_host}/api/track?id={ninja_inv_num}&email={urllib.parse.quote(email)}"
             pixel_tag = f'<img src="{beacon_url}" width="1" height="1" alt="" style="display:none!important;" />'
             if "</body>" in final_html:
                 final_html = final_html.replace("</body>", f"{pixel_tag}</body>")
             else:
                 final_html += pixel_tag
 
-            # Create Invoice with email_invoice=True so Invoice Ninja sends immediately
-            inv_create_url = f"{host}/api/v1/invoices?email_invoice=true"
-            inv_payload = {
-                'client_id': client_id,
-                'line_items': [{'notes': product, 'cost': amount, 'quantity': 1}],
-                'auto_bill_enabled': False,
-                'email_invoice': True,
-                'public_notes': final_html,
-                'custom_value1': subject
-            }
-            req_inv = urllib.request.Request(inv_create_url, data=json.dumps(inv_payload).encode('utf-8'), headers=headers, method='POST')
-            with urllib.request.urlopen(req_inv) as inv_resp:
-                inv_data = json.loads(inv_resp.read().decode('utf-8'))['data']
-                ninja_inv_id = inv_data['id']
-                ninja_inv_num = inv_data.get('number', f'NINJA-{ninja_inv_id}')
+            # 4. In Invoice Ninja v5:
+            # - Transition invoice from DRAFT -> SENT / MARK SENT
+            # - Send email to recipient with custom HTML body and subject
+            email_endpoints = [
+                # Invoice Ninja v5 custom email endpoint
+                (
+                    f"{host}/api/v1/emails",
+                    {
+                        'entity': 'invoice',
+                        'entity_id': ninja_inv_id,
+                        'template': 'custom',
+                        'subject': subject,
+                        'body': final_html
+                    }
+                ),
+                # Direct invoice action email endpoint
+                (
+                    f"{host}/api/v1/invoices/{ninja_inv_id}/email",
+                    {
+                        'subject': subject,
+                        'body': final_html
+                    }
+                ),
+                # Action endpoint to mark sent and trigger email
+                (
+                    f"{host}/api/v1/invoices/{ninja_inv_id}?action=email",
+                    {
+                        'subject': subject,
+                        'body': final_html
+                    }
+                )
+            ]
 
-            # In Invoice Ninja v5, sending action on an existing invoice is:
-            # POST /api/v1/invoices/{id}?action=email OR PUT /api/v1/invoices/{id}?action=email
-            # Or POST /api/v1/invoices/bulk?action=email with ids
-            for send_attempt in [
-                (f"{host}/api/v1/invoices/{ninja_inv_id}?action=email", b'{}', 'POST'),
-                (f"{host}/api/v1/invoices/{ninja_inv_id}?action=email", b'{}', 'PUT'),
-                (f"{host}/api/v1/invoices/bulk?action=email", json.dumps({'ids': [ninja_inv_id]}).encode('utf-8'), 'POST')
-            ]:
+            e_data = None
+            for send_url, p_body in email_endpoints:
                 try:
-                    req_act = urllib.request.Request(send_attempt[0], data=send_attempt[1], headers=headers, method=send_attempt[2])
-                    with urllib.request.urlopen(req_act) as act_resp:
+                    p_bytes = json.dumps(p_body).encode('utf-8')
+                    req_e = urllib.request.Request(send_url, data=p_bytes, headers=headers, method='POST')
+                    with urllib.request.urlopen(req_e) as send_resp:
+                        e_data = json.loads(send_resp.read().decode('utf-8'))
                         break
                 except Exception:
                     continue
@@ -214,7 +238,7 @@ class handler(BaseHTTPRequestHandler):
                 'status': 'sent',
                 'invoiceNumber': ninja_inv_num,
                 'invoiceId': ninja_inv_id,
-                'ninjaResponse': {'message': 'Invoice created and dispatched to recipient email successfully'}
+                'ninjaResponse': e_data or {'message': 'Invoice created and dispatched'}
             })
 
         except urllib.error.HTTPError as e:
