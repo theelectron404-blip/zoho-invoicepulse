@@ -647,12 +647,45 @@
       });
     }
 
+    // Real-time server open tracker synchronization
+    async function syncOpenTracking() {
+      try {
+        const res = await fetch('/api/track?events=1');
+        const data = await res.json();
+        const events = data.events || {};
+        let updated = false;
+
+        queue.forEach(item => {
+          const invKey = (item.inv || '').toLowerCase();
+          const emailKey = (item.email || '').toLowerCase();
+          const ev = events[invKey] || events[emailKey];
+
+          if (ev && ev.opens > 0) {
+            if (item.status !== 'Opened' || (item.opens || 0) < ev.opens) {
+              item.status = 'Opened';
+              item.opens = ev.opens;
+              updated = true;
+            }
+          }
+        });
+
+        if (updated) {
+          save('queue', queue);
+          render();
+        }
+      } catch(e) {}
+    }
+
+    // Auto-poll open tracking events every 6 seconds
+    setInterval(syncOpenTracking, 6000);
+
     // Initialize
     switchProviderTab(provider);
     loadTemplateState();
     handleAuthCallback();
     updateAuthBadge();
     render();
+    syncOpenTracking();
   </script>
 </body>
 </html>
