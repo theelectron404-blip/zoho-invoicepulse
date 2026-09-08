@@ -263,7 +263,7 @@
           authToken = {
             access_token: data.access_token,
             refresh_token: data.refresh_token || (authToken && authToken.refresh_token),
-            expires_at: Date.now() + ((data.expires_in || 3600) * 1000) - 60000
+            expires_at: Date.now() + ((data.expires_in || 3600) * 1000) - 300000
           };
           save('authToken', authToken);
           updateAuthBadge();
@@ -298,7 +298,7 @@
         const data = await res.json();
         if (data.access_token) {
           authToken.access_token = data.access_token;
-          authToken.expires_at = Date.now() + ((data.expires_in || 3600) * 1000) - 60000;
+          authToken.expires_at = Date.now() + ((data.expires_in || 3600) * 1000) - 300000;
           save('authToken', authToken);
           return authToken.access_token;
         }
@@ -482,10 +482,17 @@
       btn.textContent = 'Sending All...';
 
       let sent = 0;
-      for (const item of pending) {
+      for (let i = 0; i < pending.length; i++) {
+        const item = pending[i];
+        btn.textContent = `Sending (${i + 1}/${pending.length})...`;
         const ok = await sendInvoice(item);
         if (ok) sent++;
         render();
+
+        // 1.2s delay between dispatches to respect Zoho rate limits
+        if (i < pending.length - 1) {
+          await new Promise(r => setTimeout(r, 1200));
+        }
       }
 
       btn.disabled = false;

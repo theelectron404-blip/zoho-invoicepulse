@@ -77,6 +77,9 @@ class handler(BaseHTTPRequestHandler):
             else:
                 final_html += pixel_tag
 
+            # Ensure clean utf-8 formatting and strip unsafe control characters from final html
+            final_html = "".join(ch for ch in final_html if ch == '\n' or ch == '\r' or ch == '\t' or ord(ch) >= 32)
+
             send_payload = {
                 'send_attachment': True,
                 'to_mail_ids': [email],
@@ -86,7 +89,7 @@ class handler(BaseHTTPRequestHandler):
 
             # Try Zoho Invoice first, fallback to Books
             send_url = f"{api_domain}/invoice/v3/invoices/{inv_id}/email?organization_id={org_id}"
-            req_send = urllib.request.Request(send_url, data=json.dumps(send_payload).encode('utf-8'), headers=headers, method='POST')
+            req_send = urllib.request.Request(send_url, data=json.dumps(send_payload, ensure_ascii=False).encode('utf-8'), headers=headers, method='POST')
             try:
                 with urllib.request.urlopen(req_send) as send_resp:
                     resp_data = json.loads(send_resp.read().decode('utf-8'))
