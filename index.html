@@ -33,11 +33,11 @@
       <div class="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white text-xl shadow-lg shadow-blue-500/20">⚡</div>
       <div>
         <h1 class="font-bold text-slate-100 text-base leading-tight">InvoicePulse</h1>
-        <p class="text-[11px] text-slate-400">Zoho Invoice &bull; Custom Email &bull; Open Tracker</p>
+        <p class="text-[11px] text-slate-400">Zoho Invoice &bull; Invoice Ninja &bull; Custom Email &bull; Open Tracker</p>
       </div>
     </div>
     <div class="flex items-center space-x-3">
-      <button onclick="toggleSettings()" class="text-xs text-slate-400 hover:text-white bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">⚙️ Zoho Setup</button>
+      <button onclick="toggleSettings()" class="text-xs text-slate-400 hover:text-white bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">⚙️ Provider Setup</button>
       <button onclick="sendAllQueued()" id="btn-top-send" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-lg shadow-emerald-600/20 transition">🚀 Send All</button>
     </div>
   </header>
@@ -47,29 +47,66 @@
     <!-- SETTINGS PANEL -->
     <div id="settings-panel" class="hidden bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 shadow-xl">
       <div class="flex justify-between items-center">
-        <h2 class="text-sm font-bold text-white">⚙️ Zoho Invoice API Credentials</h2>
+        <h2 class="text-sm font-bold text-white">⚙️ Integration &amp; Provider Credentials</h2>
         <button onclick="toggleSettings()" class="text-slate-400 hover:text-white text-lg">&times;</button>
       </div>
-      <p class="text-xs text-slate-400">Credentials are stored privately in your browser's localStorage. Multiple users can use this independently.</p>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-        <div><label class="text-slate-400 font-semibold block mb-1">Zoho Client ID</label><input id="cfg-cid" type="text" placeholder="1000.XXXXXXXXXXXX" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono" /></div>
-        <div><label class="text-slate-400 font-semibold block mb-1">Zoho Client Secret</label><input id="cfg-secret" type="password" placeholder="xxxxxxxxxxxxxxx" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono" /></div>
-        <div><label class="text-slate-400 font-semibold block mb-1">Zoho Organization ID</label><input id="cfg-org" type="text" placeholder="e.g. 938042465" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono" /></div>
-        <div>
-          <label class="text-slate-400 font-semibold block mb-1">Region</label>
-          <select id="cfg-region" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono">
-            <option value="US">US (accounts.zoho.com)</option>
-            <option value="EU">EU (accounts.zoho.eu)</option>
-            <option value="IN">IN (accounts.zoho.in)</option>
-            <option value="AU">AU (accounts.zoho.com.au)</option>
-          </select>
+
+      <!-- PROVIDER SELECTION TAB -->
+      <div class="flex border-b border-slate-800 pb-3 gap-3">
+        <label class="flex items-center space-x-2 text-xs font-semibold text-slate-200 cursor-pointer">
+          <input type="radio" name="active_provider" value="zoho" onchange="switchProviderTab('zoho')" class="accent-blue-500" />
+          <span>Zoho Invoice / Books</span>
+        </label>
+        <label class="flex items-center space-x-2 text-xs font-semibold text-slate-200 cursor-pointer">
+          <input type="radio" name="active_provider" value="invoiceninja" onchange="switchProviderTab('invoiceninja')" class="accent-blue-500" />
+          <span>🥷 Invoice Ninja (Hosted Pro / Self-Hosted)</span>
+        </label>
+      </div>
+
+      <!-- ZOHO CONFIG FIELDS -->
+      <div id="cfg-section-zoho" class="space-y-3">
+        <p class="text-xs text-slate-400">Zoho Credentials are stored privately in browser localStorage.</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+          <div><label class="text-slate-400 font-semibold block mb-1">Zoho Client ID</label><input id="cfg-cid" type="text" placeholder="1000.XXXXXXXXXXXX" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono" /></div>
+          <div><label class="text-slate-400 font-semibold block mb-1">Zoho Client Secret</label><input id="cfg-secret" type="password" placeholder="xxxxxxxxxxxxxxx" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono" /></div>
+          <div><label class="text-slate-400 font-semibold block mb-1">Zoho Organization ID</label><input id="cfg-org" type="text" placeholder="e.g. 938042465" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono" /></div>
+          <div>
+            <label class="text-slate-400 font-semibold block mb-1">Region</label>
+            <select id="cfg-region" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono">
+              <option value="US">US (accounts.zoho.com)</option>
+              <option value="EU">EU (accounts.zoho.eu)</option>
+              <option value="IN">IN (accounts.zoho.in)</option>
+              <option value="AU">AU (accounts.zoho.com.au)</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <button onclick="saveZohoConfig()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-5 py-2 rounded-lg shadow">💾 Save Zoho Credentials</button>
+          <a id="auth-link" href="#" target="_blank" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2 rounded-lg shadow">🔗 Authorize Zoho</a>
+          <span id="auth-badge" class="text-xs text-slate-500 font-mono">Not connected</span>
         </div>
       </div>
-      <div class="flex items-center gap-3">
-        <button onclick="saveZohoConfig()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-5 py-2 rounded-lg shadow">💾 Save</button>
-        <a id="auth-link" href="#" target="_blank" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2 rounded-lg shadow">🔗 Authorize Zoho</a>
-        <span id="auth-badge" class="text-xs text-slate-500 font-mono">Not connected</span>
+
+      <!-- INVOICE NINJA CONFIG FIELDS -->
+      <div id="cfg-section-invoiceninja" class="hidden space-y-3">
+        <p class="text-xs text-slate-400">Invoice Ninja Pro or Self-Hosted configuration. Zero daily API rate limits!</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+          <div>
+            <label class="text-slate-400 font-semibold block mb-1">Invoice Ninja Host URL</label>
+            <input id="cfg-ninja-host" type="text" placeholder="https://app.invoicing.co" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono" />
+            <span class="text-[10px] text-slate-500">Use <code>https://app.invoicing.co</code> for Hosted Pro, or your self-hosted URL.</span>
+          </div>
+          <div>
+            <label class="text-slate-400 font-semibold block mb-1">API Token / Key</label>
+            <input id="cfg-ninja-key" type="password" placeholder="API Secret Key from Ninja Settings -> API Tokens" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 font-mono" />
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <button onclick="saveNinjaConfig()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-5 py-2 rounded-lg shadow">💾 Save Invoice Ninja Credentials</button>
+          <span id="ninja-badge" class="text-xs text-slate-500 font-mono">Status: Ready</span>
+        </div>
       </div>
+
     </div>
 
     <!-- 1. EMAIL SUBJECT & BODY EDITOR -->
@@ -181,11 +218,16 @@
     function save(key, val) { try { localStorage.setItem('ip_' + key, JSON.stringify(val)); } catch(e) {} }
 
     let queue = load('queue', []);
+    let provider = load('provider', 'zoho'); // 'zoho' or 'invoiceninja'
     let cfg = load('cfg', {
       clientId: '1000.BONVTOH09HNPUD7VGEHXG11ABVVPLK',
       clientSecret: '7a131c4a49f2eadea758fd46eccff6b929da59dd5e',
       orgId: '938042465',
       region: 'US'
+    });
+    let ninjaCfg = load('ninjaCfg', {
+      host: 'https://app.invoicing.co',
+      key: ''
     });
     let authToken = load('authToken', null);
 
@@ -196,12 +238,23 @@
       AU: { accounts: 'https://accounts.zoho.com.au', api: 'https://www.zohoapis.com.au' },
     };
 
+    function switchProviderTab(p) {
+      provider = p;
+      save('provider', provider);
+      document.querySelectorAll('input[name="active_provider"]').forEach(r => r.checked = (r.value === p));
+      document.getElementById('cfg-section-zoho').classList.toggle('hidden', p !== 'zoho');
+      document.getElementById('cfg-section-invoiceninja').classList.toggle('hidden', p !== 'invoiceninja');
+    }
+
     function toggleSettings() {
       document.getElementById('settings-panel').classList.toggle('hidden');
+      switchProviderTab(provider);
       if (cfg.clientId) document.getElementById('cfg-cid').value = cfg.clientId;
       if (cfg.clientSecret) document.getElementById('cfg-secret').value = cfg.clientSecret;
       if (cfg.orgId) document.getElementById('cfg-org').value = cfg.orgId;
       document.getElementById('cfg-region').value = cfg.region || 'US';
+      if (ninjaCfg.host) document.getElementById('cfg-ninja-host').value = ninjaCfg.host;
+      if (ninjaCfg.key) document.getElementById('cfg-ninja-key').value = ninjaCfg.key;
       updateAuthLink();
       updateAuthBadge();
     }
@@ -213,7 +266,14 @@
       cfg.region = document.getElementById('cfg-region').value;
       save('cfg', cfg);
       updateAuthLink();
-      alert('Credentials saved for this browser session.');
+      alert('Zoho Credentials saved for this browser session.');
+    }
+
+    function saveNinjaConfig() {
+      ninjaCfg.host = document.getElementById('cfg-ninja-host').value.trim() || 'https://app.invoicing.co';
+      ninjaCfg.key = document.getElementById('cfg-ninja-key').value.trim();
+      save('ninjaCfg', ninjaCfg);
+      alert('Invoice Ninja Credentials saved! You can now send invoices via Invoice Ninja.');
     }
 
     function updateAuthLink() {
@@ -410,29 +470,39 @@
 
     async function sendInvoice(item) {
       try {
-        const token = await getValidToken();
-        const r = REGIONS[cfg.region] || REGIONS.US;
         const { subject, body } = getSubjectBody(item.name, item.product, item.amount, item.inv, 'My Store', '2026-10-15');
+
+        let payload = {
+          provider: provider,
+          name: item.name,
+          email: item.email,
+          amount: item.amount,
+          product: item.product,
+          subject: subject,
+          body: body
+        };
+
+        if (provider === 'invoiceninja') {
+          if (!ninjaCfg.key) throw new Error('Invoice Ninja API Key missing. Please open ⚙️ Provider Setup.');
+          payload.ninja_host = ninjaCfg.host || 'https://app.invoicing.co';
+          payload.ninja_key = ninjaCfg.key;
+        } else {
+          const token = await getValidToken();
+          const r = REGIONS[cfg.region] || REGIONS.US;
+          payload.token = token;
+          payload.org_id = cfg.orgId;
+          payload.api_domain = r.api;
+        }
 
         const res = await fetch('/api/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            token: token,
-            org_id: cfg.orgId,
-            api_domain: r.api,
-            name: item.name,
-            email: item.email,
-            amount: item.amount,
-            product: item.product,
-            subject: subject,
-            body: body
-          })
+          body: JSON.stringify(payload)
         });
         const data = await res.json();
         if (data.error) throw new Error(data.error);
 
-        item.inv = data.invoiceNumber || 'INV-SENT';
+        item.inv = data.invoiceNumber || (provider === 'invoiceninja' ? 'NINJA-SENT' : 'INV-SENT');
         item.status = 'Sent';
         save('queue', queue);
         return true;
@@ -451,20 +521,20 @@
       const name = email.split('@')[0];
       const btn = document.getElementById('btn-instant');
       btn.disabled = true;
-      btn.textContent = 'Sending via Zoho...';
+      btn.textContent = `Sending via ${provider === 'invoiceninja' ? 'Invoice Ninja' : 'Zoho'}...`;
 
       const item = { id: Date.now(), inv: 'INV-QUEUED', name, email, product, amount, status: 'Queued', opens: 0 };
       queue.unshift(item);
 
       sendInvoice(item).then(ok => {
         btn.disabled = false;
-        btn.textContent = '⚡ Send Now via Zoho';
+        btn.textContent = '⚡ Send Now';
         if (ok) {
           ['in-email','in-product','in-amount'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.value = '';
           });
-          alert(`Success! Invoice #${item.inv} sent to ${email} via Zoho Invoice!`);
+          alert(`Success! Invoice #${item.inv} sent to ${email} via ${provider === 'invoiceninja' ? 'Invoice Ninja' : 'Zoho'}!`);
         }
         render();
       });
