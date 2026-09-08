@@ -10,8 +10,28 @@ GIF_1X1 = (
     b"\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;"
 )
 
-# In-memory tracking store for open events
+# Tracking store for open events.
+# Persists to /tmp so it survives across warm invocations on the same instance.
+# Note: Vercel serverless /tmp is ephemeral - for durable multi-instance tracking,
+# swap in a persistent store (Vercel KV / Upstash Redis) behind the same get/set API.
+import os
+
+TRACK_FILE = '/tmp/invoicepulse_track.json'
 TRACK_EVENTS = {}
+
+def _load_events():
+    try:
+        with open(TRACK_FILE, 'r', encoding='utf-8') as f:
+            return json.loads(f.read())
+    except Exception:
+        return {}
+
+def _save_events(events):
+    try:
+        with open(TRACK_FILE, 'w', encoding='utf-8') as f:
+            f.write(json.dumps(events))
+    except Exception:
+        pass
 
 class handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
@@ -27,12 +47,13 @@ class handler(BaseHTTPRequestHandler):
 
         # 1. Status query endpoint (for frontend to poll real-time opens)
         if 'status' in params or 'events' in params:
+            events = _load_events()
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
             self.end_headers()
-            self.wfile.write(json.dumps({'events': TRACK_EVENTS}).encode('utf-8'))
+            self.wfile.write(json.dumps({'events': events}).encode('utf-8'))
             return
 
         # 2. Open tracking beacon hit (from recipient mail client)
@@ -40,11 +61,13 @@ class handler(BaseHTTPRequestHandler):
         email = params.get('email', [None])[0]
 
         if inv_id or email:
+            events = _load_events()
             key = (inv_id or email).lower()
-            if key not in TRACK_EVENTS:
-                TRACK_EVENTS[key] = {'opens': 0, 'last_opened': 0, 'email': email, 'inv': inv_id}
-            TRACK_EVENTS[key]['opens'] += 1
-            TRACK_EVENTS[key]['last_opened'] = int(time.time())
+            if key not in events:
+                events[key] = {'opens': 0, 'last_opened': 0, 'email': email, 'inv': inv_id}
+            events[key]['opens'] += 1
+            events[key]['last_opened'] = int(time.time())
+            _save_events(events)
 
         # Return 1x1 transparent GIF with anti-caching headers so email clients always load it
         self.send_response(200)
